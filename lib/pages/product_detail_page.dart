@@ -1,13 +1,11 @@
 
 
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../controllers/cart_controller.dart';
 import '../models/product_model.dart';
 import '../widgets/cart_icon_button.dart';
-import '../widgets/product_image.dart';
 
 class ProductDetailPage extends StatelessWidget {
   final ProductModel product;
@@ -23,7 +21,6 @@ class ProductDetailPage extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FC),
-
       appBar: AppBar(
         title: const Text(
           'Product Details',
@@ -36,13 +33,10 @@ class ProductDetailPage extends StatelessWidget {
           SizedBox(width: 10),
         ],
       ),
-
-      // কোনো bottomNavigationBar নেই
       body: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
 
-          // Desktop / Web
           if (width >= 900) {
             return _buildDesktopView(
               context,
@@ -50,7 +44,6 @@ class ProductDetailPage extends StatelessWidget {
             );
           }
 
-          // Mobile / Tablet
           return _buildMobileView(
             context,
             cartController,
@@ -63,7 +56,6 @@ class ProductDetailPage extends StatelessWidget {
   // =========================================================
   // DESKTOP / WEB
   // =========================================================
-
   Widget _buildDesktopView(
       BuildContext context,
       CartController cartController,
@@ -75,9 +67,8 @@ class ProductDetailPage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ===================================================
-          // LEFT IMAGE
+          // LEFT IMAGE / GALLERY
           // ===================================================
-
           Expanded(
             flex: 5,
             child: Container(
@@ -90,7 +81,8 @@ class ProductDetailPage extends StatelessWidget {
                   color: const Color(0xFFF1F3F7),
                   borderRadius: BorderRadius.circular(24),
                 ),
-                child: ProductImage(
+                clipBehavior: Clip.antiAlias,
+                child: _ProductImageGallery(
                   product: product,
                   width: double.infinity,
                   height: double.infinity,
@@ -104,7 +96,6 @@ class ProductDetailPage extends StatelessWidget {
           // ===================================================
           // RIGHT DETAILS
           // ===================================================
-
           Expanded(
             flex: 6,
             child: SingleChildScrollView(
@@ -124,21 +115,20 @@ class ProductDetailPage extends StatelessWidget {
   // =========================================================
   // MOBILE / TABLET
   // =========================================================
-
   Widget _buildMobileView(
       BuildContext context,
       CartController cartController,
       ) {
     final width = MediaQuery.sizeOf(context).width;
 
-    double imageHeight = width * 0.72;
+    double imageHeight = width * 0.82;
 
-    if (imageHeight > 400) {
-      imageHeight = 400;
+    if (imageHeight > 430) {
+      imageHeight = 430;
     }
 
-    if (imageHeight < 230) {
-      imageHeight = 230;
+    if (imageHeight < 260) {
+      imageHeight = 260;
     }
 
     return SingleChildScrollView(
@@ -146,7 +136,9 @@ class ProductDetailPage extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // IMAGE
+          // ===================================================
+          // IMAGE / GALLERY
+          // ===================================================
           Container(
             width: double.infinity,
             height: imageHeight,
@@ -154,7 +146,8 @@ class ProductDetailPage extends StatelessWidget {
               color: const Color(0xFFF1F3F7),
               borderRadius: BorderRadius.circular(22),
             ),
-            child: ProductImage(
+            clipBehavior: Clip.antiAlias,
+            child: _ProductImageGallery(
               product: product,
               width: double.infinity,
               height: imageHeight,
@@ -165,7 +158,9 @@ class ProductDetailPage extends StatelessWidget {
 
           const SizedBox(height: 24),
 
+          // ===================================================
           // DETAILS
+          // ===================================================
           _buildDetails(
             context,
             cartController,
@@ -181,7 +176,6 @@ class ProductDetailPage extends StatelessWidget {
   // =========================================================
   // PRODUCT DETAILS
   // =========================================================
-
   Widget _buildDetails(
       BuildContext context,
       CartController cartController, {
@@ -193,7 +187,6 @@ class ProductDetailPage extends StatelessWidget {
         // =====================================================
         // CATEGORY
         // =====================================================
-
         if (product.productCategory.trim().isNotEmpty)
           Container(
             padding: const EdgeInsets.symmetric(
@@ -219,7 +212,6 @@ class ProductDetailPage extends StatelessWidget {
         // =====================================================
         // PRODUCT NAME
         // =====================================================
-
         Text(
           product.description.trim().isEmpty
               ? product.itemCode
@@ -237,7 +229,6 @@ class ProductDetailPage extends StatelessWidget {
         // =====================================================
         // ITEM CODE
         // =====================================================
-
         Row(
           children: [
             const Icon(
@@ -263,7 +254,6 @@ class ProductDetailPage extends StatelessWidget {
         // =====================================================
         // SMALL ADD TO CART BUTTON
         // =====================================================
-
         SizedBox(
           height: 42,
           child: FilledButton.icon(
@@ -298,7 +288,6 @@ class ProductDetailPage extends StatelessWidget {
         // =====================================================
         // PRODUCT INFORMATION TITLE
         // =====================================================
-
         const Row(
           children: [
             Icon(
@@ -321,7 +310,6 @@ class ProductDetailPage extends StatelessWidget {
         // =====================================================
         // INFORMATION CARD
         // =====================================================
-
         Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(
@@ -419,6 +407,703 @@ class ProductDetailPage extends StatelessWidget {
   }
 }
 
+// ============================================================================
+// PRODUCT IMAGE GALLERY
+// ============================================================================
+
+class _ProductImageGallery extends StatefulWidget {
+  final ProductModel product;
+  final double width;
+  final double height;
+  final BoxFit fit;
+  final double borderRadius;
+
+  const _ProductImageGallery({
+    required this.product,
+    required this.width,
+    required this.height,
+    required this.fit,
+    required this.borderRadius,
+  });
+
+  @override
+  State<_ProductImageGallery> createState() =>
+      _ProductImageGalleryState();
+}
+
+class _ProductImageGalleryState extends State<_ProductImageGallery> {
+  static const String _serverBaseUrl =
+      'https://e501.sihirbox.com:8071';
+
+  static const String _imageBaseUrl =
+      'https://e501.sihirbox.com:8071/ords/rpro/image_service/get/';
+
+  final PageController _pageController = PageController();
+
+  int _currentIndex = 0;
+
+  late final List<String> _imageUrls;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _imageUrls = _resolveProductImageUrls(
+      widget.product,
+    );
+
+    debugPrint('==========================================');
+    debugPrint('PRODUCT IMAGE URLS');
+    debugPrint('ITEM CODE => ${widget.product.itemCode}');
+    debugPrint('TOTAL IMAGE => ${_imageUrls.length}');
+
+    for (int i = 0; i < _imageUrls.length; i++) {
+      debugPrint('IMAGE ${i + 1} => ${_imageUrls[i]}');
+    }
+
+    debugPrint('==========================================');
+  }
+
+  // ============================================================
+  // NORMALIZE URL
+  // ============================================================
+  String _normalizeImageUrl(dynamic value) {
+    if (value == null) {
+      return '';
+    }
+
+    String url = value.toString().trim();
+
+    if (url.isEmpty || url.toLowerCase() == 'null') {
+      return '';
+    }
+
+    if (url.startsWith('https://') ||
+        url.startsWith('http://')) {
+      return url;
+    }
+
+    while (url.startsWith('/')) {
+      url = url.substring(1);
+    }
+
+    if (url.isEmpty) {
+      return '';
+    }
+
+    // API যদি relative ORDS URL return করে
+    if (url.startsWith('ords/')) {
+      return '$_serverBaseUrl/$url';
+    }
+
+    // API যদি শুধু physical filename return করে
+    final encodedPath = url
+        .split('/')
+        .where((part) => part.isNotEmpty)
+        .map(Uri.encodeComponent)
+        .join('/');
+
+    if (encodedPath.isEmpty) {
+      return '';
+    }
+
+    return '$_imageBaseUrl$encodedPath';
+  }
+
+  // ============================================================
+  // COLLECT ALL POSSIBLE IMAGE FIELDS
+  // ============================================================
+  List<String> _resolveProductImageUrls(
+      ProductModel product,
+      ) {
+    final List<String> result = <String>[];
+    final Set<String> unique = <String>{};
+
+    void addUrl(dynamic value) {
+      final String normalized =
+      _normalizeImageUrl(value);
+
+      if (normalized.isEmpty) {
+        return;
+      }
+
+      if (unique.add(normalized)) {
+        result.add(normalized);
+      }
+    }
+
+    void readNode(
+        dynamic node, {
+          int depth = 0,
+        }) {
+      if (node == null || depth > 5) {
+        return;
+      }
+
+      if (node is String) {
+        addUrl(node);
+        return;
+      }
+
+      // --------------------------------------------------------
+      // MAP JSON SUPPORT
+      // --------------------------------------------------------
+      if (node is Map) {
+        addUrl(
+          node['image_url'] ??
+              node['imageUrl'],
+        );
+
+        addUrl(
+          node['file_url'] ??
+              node['fileUrl'],
+        );
+
+        final dynamic images =
+        node['images'];
+
+        if (images is Iterable) {
+          for (final dynamic image in images) {
+            readNode(
+              image,
+              depth: depth + 1,
+            );
+          }
+        }
+
+        final dynamic details =
+        node['details'];
+
+        if (details is Iterable) {
+          for (final dynamic detail in details) {
+            readNode(
+              detail,
+              depth: depth + 1,
+            );
+          }
+        }
+
+        return;
+      }
+
+      // --------------------------------------------------------
+      // MODEL / OBJECT SUPPORT
+      // --------------------------------------------------------
+      final dynamic dynamicNode = node;
+
+      try {
+        addUrl(dynamicNode.imageUrl);
+      } catch (_) {}
+
+      try {
+        addUrl(dynamicNode.image_url);
+      } catch (_) {}
+
+      try {
+        addUrl(dynamicNode.fileUrl);
+      } catch (_) {}
+
+      try {
+        addUrl(dynamicNode.file_url);
+      } catch (_) {}
+
+      try {
+        final dynamic images =
+            dynamicNode.images;
+
+        if (images is Iterable) {
+          for (final dynamic image in images) {
+            readNode(
+              image,
+              depth: depth + 1,
+            );
+          }
+        }
+      } catch (_) {}
+
+      try {
+        final dynamic details =
+            dynamicNode.details;
+
+        if (details is Iterable) {
+          for (final dynamic detail in details) {
+            readNode(
+              detail,
+              depth: depth + 1,
+            );
+          }
+        }
+      } catch (_) {}
+    }
+
+    // ProductModel কে dynamic হিসেবে read করা হচ্ছে,
+    // তাই imageUrl/fileUrl field model-এ না থাকলেও compile error হবে না।
+    readNode(product);
+
+    return result;
+  }
+
+  // ============================================================
+  // FULL SCREEN PREVIEW
+  // ============================================================
+  void _openFullScreenPreview(
+      BuildContext context,
+      String imageUrl,
+      ) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.92),
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(16),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: InteractiveViewer(
+                  minScale: 0.7,
+                  maxScale: 5,
+                  child: Center(
+                    child: Image.network(
+                      imageUrl,
+                      fit: BoxFit.contain,
+                      errorBuilder: (
+                          context,
+                          error,
+                          stackTrace,
+                          ) {
+                        return const Center(
+                          child: Icon(
+                            Icons.broken_image_outlined,
+                            size: 80,
+                            color: Colors.white70,
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ),
+
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Material(
+                  color: Colors.black54,
+                  shape: const CircleBorder(),
+                  child: IconButton(
+                    onPressed: () {
+                      Navigator.of(dialogContext).pop();
+                    },
+                    icon: const Icon(
+                      Icons.close_rounded,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // MAIN IMAGE
+  // ============================================================
+  Widget _buildNetworkImage(
+      String imageUrl,
+      ) {
+    return GestureDetector(
+      onTap: () {
+        _openFullScreenPreview(
+          context,
+          imageUrl,
+        );
+      },
+      child: Container(
+        color: const Color(0xFFF1F3F7),
+        alignment: Alignment.center,
+        child: Image.network(
+          imageUrl,
+          width: double.infinity,
+          height: double.infinity,
+          fit: widget.fit,
+
+          loadingBuilder: (
+              context,
+              child,
+              loadingProgress,
+              ) {
+            if (loadingProgress == null) {
+              return child;
+            }
+
+            final total =
+                loadingProgress.expectedTotalBytes;
+
+            return Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                value: total != null
+                    ? loadingProgress
+                    .cumulativeBytesLoaded /
+                    total
+                    : null,
+              ),
+            );
+          },
+
+          errorBuilder: (
+              context,
+              error,
+              stackTrace,
+              ) {
+            debugPrint(
+              'IMAGE LOAD FAILED => $imageUrl',
+            );
+            debugPrint(
+              'IMAGE ERROR => $error',
+            );
+
+            return const _ImageErrorPlaceholder();
+          },
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // THUMBNAIL
+  // ============================================================
+  Widget _buildThumbnail(
+      String url,
+      int index,
+      ) {
+    final bool selected =
+        index == _currentIndex;
+
+    return GestureDetector(
+      onTap: () {
+        _pageController.animateToPage(
+          index,
+          duration: const Duration(
+            milliseconds: 250,
+          ),
+          curve: Curves.easeOut,
+        );
+      },
+      child: AnimatedContainer(
+        duration: const Duration(
+          milliseconds: 180,
+        ),
+        width: 64,
+        height: 64,
+        margin: const EdgeInsets.only(
+          right: 8,
+        ),
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius:
+          BorderRadius.circular(10),
+          border: Border.all(
+            color: selected
+                ? Theme.of(context)
+                .colorScheme
+                .primary
+                : const Color(
+              0xFFDDE1E8,
+            ),
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius:
+          BorderRadius.circular(7),
+          child: Image.network(
+            url,
+            fit: BoxFit.cover,
+            errorBuilder: (
+                context,
+                error,
+                stackTrace,
+                ) {
+              return const ColoredBox(
+                color: Color(0xFFF1F3F7),
+                child: Center(
+                  child: Icon(
+                    Icons.broken_image_outlined,
+                    size: 20,
+                    color: Color(
+                      0xFF9AA2B1,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // ============================================================
+    // NO IMAGE
+    // ============================================================
+    if (_imageUrls.isEmpty) {
+      return SizedBox(
+        width: widget.width,
+        height: widget.height,
+        child: const _NoImagePlaceholder(),
+      );
+    }
+
+    // ============================================================
+    // SINGLE / MULTIPLE IMAGE
+    // ============================================================
+    return SizedBox(
+      width: widget.width,
+      height: widget.height,
+      child: Column(
+        children: [
+          Expanded(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: PageView.builder(
+                    controller:
+                    _pageController,
+                    itemCount:
+                    _imageUrls.length,
+                    onPageChanged:
+                        (index) {
+                      setState(() {
+                        _currentIndex =
+                            index;
+                      });
+                    },
+                    itemBuilder: (
+                        context,
+                        index,
+                        ) {
+                      return _buildNetworkImage(
+                        _imageUrls[index],
+                      );
+                    },
+                  ),
+                ),
+
+                // Image counter
+                if (_imageUrls.length > 1)
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Container(
+                      padding:
+                      const EdgeInsets
+                          .symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration:
+                      BoxDecoration(
+                        color: Colors.black
+                            .withOpacity(
+                          0.58,
+                        ),
+                        borderRadius:
+                        BorderRadius
+                            .circular(
+                          20,
+                        ),
+                      ),
+                      child: Text(
+                        '${_currentIndex + 1}/${_imageUrls.length}',
+                        style:
+                        const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight:
+                          FontWeight
+                              .w700,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                // Zoom hint
+                Positioned(
+                  bottom: 10,
+                  right: 10,
+                  child: Container(
+                    padding:
+                    const EdgeInsets
+                        .all(7),
+                    decoration:
+                    BoxDecoration(
+                      color: Colors.black
+                          .withOpacity(
+                        0.45,
+                      ),
+                      shape:
+                      BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.zoom_in_rounded,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ======================================================
+          // THUMBNAILS
+          // ======================================================
+          if (_imageUrls.length > 1)
+            Container(
+              height: 82,
+              width: double.infinity,
+              padding:
+              const EdgeInsets.fromLTRB(
+                12,
+                9,
+                12,
+                9,
+              ),
+              decoration:
+              const BoxDecoration(
+                color: Colors.white,
+                border: Border(
+                  top: BorderSide(
+                    color:
+                    Color(0xFFE4E7EC),
+                  ),
+                ),
+              ),
+              child:
+              ListView.builder(
+                scrollDirection:
+                Axis.horizontal,
+                itemCount:
+                _imageUrls.length,
+                itemBuilder: (
+                    context,
+                    index,
+                    ) {
+                  return _buildThumbnail(
+                    _imageUrls[index],
+                    index,
+                  );
+                },
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+}
+
+// ============================================================================
+// NO IMAGE PLACEHOLDER
+// ============================================================================
+
+class _NoImagePlaceholder extends StatelessWidget {
+  const _NoImagePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: const Color(0xFFF1F3F7),
+      child: const Center(
+        child: Column(
+          mainAxisSize:
+          MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.image_not_supported_outlined,
+              size: 64,
+              color: Color(
+                0xFF9AA2B1,
+              ),
+            ),
+            SizedBox(height: 10),
+            Text(
+              'No Image Available',
+              style: TextStyle(
+                color: Color(
+                  0xFF7A8190,
+                ),
+                fontSize: 14,
+                fontWeight:
+                FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// IMAGE ERROR PLACEHOLDER
+// ============================================================================
+
+class _ImageErrorPlaceholder extends StatelessWidget {
+  const _ImageErrorPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      color: const Color(0xFFF1F3F7),
+      child: const Center(
+        child: Column(
+          mainAxisSize:
+          MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.broken_image_outlined,
+              size: 58,
+              color: Color(
+                0xFF9AA2B1,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Image unavailable',
+              style: TextStyle(
+                color: Color(
+                  0xFF7A8190,
+                ),
+                fontSize: 13,
+                fontWeight:
+                FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ===========================================================
 // INFO ROW
 // ===========================================================
@@ -453,20 +1138,25 @@ class _InfoRow extends StatelessWidget {
               // Very small width
               if (constraints.maxWidth < 380) {
                 return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                  CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
                         Icon(
                           icon,
                           size: 18,
-                          color: const Color(0xFF747B88),
+                          color: const Color(
+                            0xFF747B88,
+                          ),
                         ),
                         const SizedBox(width: 8),
                         Text(
                           label,
                           style: const TextStyle(
-                            color: Color(0xFF747B88),
+                            color: Color(
+                              0xFF747B88,
+                            ),
                             fontSize: 13,
                           ),
                         ),
@@ -480,7 +1170,8 @@ class _InfoRow extends StatelessWidget {
                       child: Text(
                         value,
                         style: const TextStyle(
-                          fontWeight: FontWeight.w700,
+                          fontWeight:
+                          FontWeight.w700,
                         ),
                       ),
                     ),
@@ -489,12 +1180,15 @@ class _InfoRow extends StatelessWidget {
               }
 
               return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                CrossAxisAlignment.start,
                 children: [
                   Icon(
                     icon,
                     size: 19,
-                    color: const Color(0xFF747B88),
+                    color: const Color(
+                      0xFF747B88,
+                    ),
                   ),
 
                   const SizedBox(width: 9),
@@ -504,7 +1198,9 @@ class _InfoRow extends StatelessWidget {
                     child: Text(
                       label,
                       style: const TextStyle(
-                        color: Color(0xFF747B88),
+                        color: Color(
+                          0xFF747B88,
+                        ),
                         fontSize: 14,
                       ),
                     ),
@@ -517,9 +1213,12 @@ class _InfoRow extends StatelessWidget {
                       value,
                       textAlign: TextAlign.right,
                       style: const TextStyle(
-                        color: Color(0xFF202329),
+                        color: Color(
+                          0xFF202329,
+                        ),
                         fontSize: 14,
-                        fontWeight: FontWeight.w700,
+                        fontWeight:
+                        FontWeight.w700,
                       ),
                     ),
                   ),
@@ -532,7 +1231,9 @@ class _InfoRow extends StatelessWidget {
         if (showDivider)
           const Divider(
             height: 1,
-            color: Color(0xFFEEF0F4),
+            color: Color(
+              0xFFEEF0F4,
+            ),
           ),
       ],
     );
