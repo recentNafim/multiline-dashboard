@@ -1,7 +1,10 @@
 
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:http/http.dart' as http;
 
 import '../controllers/cart_controller.dart';
 import '../models/product_model.dart';
@@ -252,7 +255,7 @@ class ProductDetailPage extends StatelessWidget {
         const SizedBox(height: 20),
 
         // =====================================================
-        // SMALL ADD TO CART BUTTON
+        // ADD TO CART
         // =====================================================
         SizedBox(
           height: 42,
@@ -409,6 +412,10 @@ class ProductDetailPage extends StatelessWidget {
 
 // ============================================================================
 // PRODUCT IMAGE GALLERY
+//
+// IMPORTANT FIX:
+// ProductModel-এ শুধু first image থাকলেও এই widget GET API আবার call করে
+// selected product-এর details.images[] থেকে সব image load করবে.
 // ============================================================================
 
 class _ProductImageGallery extends StatefulWidget {
@@ -431,50 +438,59 @@ class _ProductImageGallery extends StatefulWidget {
       _ProductImageGalleryState();
 }
 
-class _ProductImageGalleryState extends State<_ProductImageGallery> {
+class _ProductImageGalleryState
+    extends State<_ProductImageGallery> {
+  static const String _apiUrl =
+      'https://e501.sihirbox.com:8071/ords/rpro/'
+      'multiline-display-room/item-upload';
+
   static const String _serverBaseUrl =
       'https://e501.sihirbox.com:8071';
 
   static const String _imageBaseUrl =
-      'https://e501.sihirbox.com:8071/ords/rpro/image_service/get/';
+      'https://e501.sihirbox.com:8071/ords/rpro/'
+      'image_service/get/';
 
-  final PageController _pageController = PageController();
+  final PageController _pageController =
+  PageController();
 
   int _currentIndex = 0;
 
-  late final List<String> _imageUrls;
+  bool _isLoadingApiImages = false;
+
+  final List<String> _imageUrls =
+  <String>[];
+
+  final Set<String> _uniqueUrls =
+  <String>{};
 
   @override
   void initState() {
     super.initState();
 
-    _imageUrls = _resolveProductImageUrls(
-      widget.product,
-    );
+    // ProductModel-এ যেটুকু image data আছে আগে সেটা দেখাবে।
+    _collectImagesFromProductModel();
 
-    debugPrint('==========================================');
-    debugPrint('PRODUCT IMAGE URLS');
-    debugPrint('ITEM CODE => ${widget.product.itemCode}');
-    debugPrint('TOTAL IMAGE => ${_imageUrls.length}');
-
-    for (int i = 0; i < _imageUrls.length; i++) {
-      debugPrint('IMAGE ${i + 1} => ${_imageUrls[i]}');
-    }
-
-    debugPrint('==========================================');
+    // তারপর API থেকে selected detail-এর সব images[] load করবে।
+    _loadAllImagesFromApi();
   }
 
-  // ============================================================
-  // NORMALIZE URL
-  // ============================================================
-  String _normalizeImageUrl(dynamic value) {
+  // ==========================================================================
+  // NORMALIZE IMAGE URL
+  // ==========================================================================
+
+  String _normalizeImageUrl(
+      dynamic value,
+      ) {
     if (value == null) {
       return '';
     }
 
-    String url = value.toString().trim();
+    String url =
+    value.toString().trim();
 
-    if (url.isEmpty || url.toLowerCase() == 'null') {
+    if (url.isEmpty ||
+        url.toLowerCase() == 'null') {
       return '';
     }
 
@@ -491,13 +507,12 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
       return '';
     }
 
-    // API যদি relative ORDS URL return করে
+    // Relative ORDS path.
     if (url.startsWith('ords/')) {
       return '$_serverBaseUrl/$url';
     }
 
-    // API যদি শুধু physical filename return করে
-    final encodedPath = url
+    final String encodedPath = url
         .split('/')
         .where((part) => part.isNotEmpty)
         .map(Uri.encodeComponent)
@@ -510,51 +525,51 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
     return '$_imageBaseUrl$encodedPath';
   }
 
-  // ============================================================
-  // COLLECT ALL POSSIBLE IMAGE FIELDS
-  // ============================================================
-  List<String> _resolveProductImageUrls(
-      ProductModel product,
+  // ==========================================================================
+  // ADD UNIQUE IMAGE
+  // ==========================================================================
+
+  void _addImageUrl(
+      dynamic value,
       ) {
-    final List<String> result = <String>[];
-    final Set<String> unique = <String>{};
+    final String url =
+    _normalizeImageUrl(value);
 
-    void addUrl(dynamic value) {
-      final String normalized =
-      _normalizeImageUrl(value);
-
-      if (normalized.isEmpty) {
-        return;
-      }
-
-      if (unique.add(normalized)) {
-        result.add(normalized);
-      }
+    if (url.isEmpty) {
+      return;
     }
 
+    if (_uniqueUrls.add(url)) {
+      _imageUrls.add(url);
+    }
+  }
+
+  // ==========================================================================
+  // PRODUCT MODEL -> INITIAL IMAGE(S)
+  // ==========================================================================
+
+  void _collectImagesFromProductModel() {
     void readNode(
         dynamic node, {
           int depth = 0,
         }) {
-      if (node == null || depth > 5) {
+      if (node == null ||
+          depth > 5) {
         return;
       }
 
       if (node is String) {
-        addUrl(node);
+        _addImageUrl(node);
         return;
       }
 
-      // --------------------------------------------------------
-      // MAP JSON SUPPORT
-      // --------------------------------------------------------
       if (node is Map) {
-        addUrl(
+        _addImageUrl(
           node['image_url'] ??
               node['imageUrl'],
         );
 
-        addUrl(
+        _addImageUrl(
           node['file_url'] ??
               node['fileUrl'],
         );
@@ -563,7 +578,8 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
         node['images'];
 
         if (images is Iterable) {
-          for (final dynamic image in images) {
+          for (final dynamic image
+          in images) {
             readNode(
               image,
               depth: depth + 1,
@@ -575,7 +591,8 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
         node['details'];
 
         if (details is Iterable) {
-          for (final dynamic detail in details) {
+          for (final dynamic detail
+          in details) {
             readNode(
               detail,
               depth: depth + 1,
@@ -586,33 +603,39 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
         return;
       }
 
-      // --------------------------------------------------------
-      // MODEL / OBJECT SUPPORT
-      // --------------------------------------------------------
-      final dynamic dynamicNode = node;
+      final dynamic model = node;
 
       try {
-        addUrl(dynamicNode.imageUrl);
+        _addImageUrl(
+          model.imageUrl,
+        );
       } catch (_) {}
 
       try {
-        addUrl(dynamicNode.image_url);
+        _addImageUrl(
+          model.image_url,
+        );
       } catch (_) {}
 
       try {
-        addUrl(dynamicNode.fileUrl);
+        _addImageUrl(
+          model.fileUrl,
+        );
       } catch (_) {}
 
       try {
-        addUrl(dynamicNode.file_url);
+        _addImageUrl(
+          model.file_url,
+        );
       } catch (_) {}
 
       try {
         final dynamic images =
-            dynamicNode.images;
+            model.images;
 
         if (images is Iterable) {
-          for (final dynamic image in images) {
+          for (final dynamic image
+          in images) {
             readNode(
               image,
               depth: depth + 1,
@@ -623,10 +646,11 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
 
       try {
         final dynamic details =
-            dynamicNode.details;
+            model.details;
 
         if (details is Iterable) {
-          for (final dynamic detail in details) {
+          for (final dynamic detail
+          in details) {
             readNode(
               detail,
               depth: depth + 1,
@@ -636,27 +660,612 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
       } catch (_) {}
     }
 
-    // ProductModel কে dynamic হিসেবে read করা হচ্ছে,
-    // তাই imageUrl/fileUrl field model-এ না থাকলেও compile error হবে না।
-    readNode(product);
+    readNode(widget.product);
+
+    debugPrint(
+      'INITIAL MODEL IMAGE COUNT => ${_imageUrls.length}',
+    );
+  }
+
+  // ==========================================================================
+  // SAFE PRODUCT IDENTIFIERS
+  // ==========================================================================
+
+  int? _productDetailSl() {
+    final dynamic product =
+        widget.product;
+
+    try {
+      final dynamic value =
+          product.sl;
+
+      final int? parsed =
+      _toInt(value);
+
+      if (parsed != null) {
+        return parsed;
+      }
+    } catch (_) {}
+
+    try {
+      final dynamic value =
+          product.detailSl;
+
+      final int? parsed =
+      _toInt(value);
+
+      if (parsed != null) {
+        return parsed;
+      }
+    } catch (_) {}
+
+    try {
+      final dynamic value =
+          product.detail_sl;
+
+      final int? parsed =
+      _toInt(value);
+
+      if (parsed != null) {
+        return parsed;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  int? _productMasterSl() {
+    final dynamic product =
+        widget.product;
+
+    try {
+      final int? value =
+      _toInt(product.mSl);
+
+      if (value != null) {
+        return value;
+      }
+    } catch (_) {}
+
+    try {
+      final int? value =
+      _toInt(product.masterSl);
+
+      if (value != null) {
+        return value;
+      }
+    } catch (_) {}
+
+    try {
+      final int? value =
+      _toInt(product.m_sl);
+
+      if (value != null) {
+        return value;
+      }
+    } catch (_) {}
+
+    try {
+      final int? value =
+      _toInt(product.master_sl);
+
+      if (value != null) {
+        return value;
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  String _productFileUrl() {
+    final dynamic product =
+        widget.product;
+
+    try {
+      final String value =
+          product.fileUrl
+              ?.toString()
+              .trim() ??
+              '';
+
+      if (value.isNotEmpty) {
+        return value;
+      }
+    } catch (_) {}
+
+    try {
+      final String value =
+          product.file_url
+              ?.toString()
+              .trim() ??
+              '';
+
+      if (value.isNotEmpty) {
+        return value;
+      }
+    } catch (_) {}
+
+    return '';
+  }
+
+  // ==========================================================================
+  // GET ALL IMAGES FROM API
+  // ==========================================================================
+
+  Future<void> _loadAllImagesFromApi() async {
+    if (_isLoadingApiImages) {
+      return;
+    }
+
+    final String itemCode =
+    widget.product.itemCode
+        .trim();
+
+    if (itemCode.isEmpty) {
+      debugPrint(
+        'IMAGE API SKIPPED => itemCode empty',
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoadingApiImages = true;
+    });
+
+    try {
+      final int? masterSl =
+      _productMasterSl();
+
+      final Map<String, String>
+      queryParameters = {
+        'p_item_code': itemCode,
+        'p_limit': '100',
+      };
+
+      // Master SL model-এ থাকলে API-তেই result narrow হবে।
+      if (masterSl != null) {
+        queryParameters[
+        'p_master_sl'] =
+            masterSl.toString();
+      }
+
+      final Uri uri =
+      Uri.parse(_apiUrl).replace(
+        queryParameters:
+        queryParameters,
+      );
+
+      debugPrint(
+        '==========================================',
+      );
+      debugPrint(
+        'LOAD PRODUCT IMAGES FROM API',
+      );
+      debugPrint(
+        'URL => $uri',
+      );
+      debugPrint(
+        'ITEM CODE => $itemCode',
+      );
+      debugPrint(
+        'DETAIL SL => ${_productDetailSl()}',
+      );
+      debugPrint(
+        'MASTER SL => $masterSl',
+      );
+      debugPrint(
+        'MODEL FILE URL => ${_productFileUrl()}',
+      );
+      debugPrint(
+        '==========================================',
+      );
+
+      final http.Response response =
+      await http
+          .get(
+        uri,
+        headers: const {
+          'Accept':
+          'application/json',
+        },
+      )
+          .timeout(
+        const Duration(
+          seconds: 60,
+        ),
+      );
+
+      debugPrint(
+        'IMAGE API STATUS => ${response.statusCode}',
+      );
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
+        throw Exception(
+          'HTTP ${response.statusCode}',
+        );
+      }
+
+      final dynamic decoded =
+      jsonDecode(
+        response.body,
+      );
+
+      final List<
+          Map<String, dynamic>>
+      details =
+      _extractAllDetails(
+        decoded,
+      );
+
+      debugPrint(
+        'MATCHABLE DETAIL COUNT => ${details.length}',
+      );
+
+      final Map<String, dynamic>?
+      selectedDetail =
+      _findSelectedDetail(
+        details,
+      );
+
+      if (selectedDetail == null) {
+        debugPrint(
+          '⚠️ IMAGE DETAIL MATCH NOT FOUND',
+        );
+        return;
+      }
+
+      debugPrint(
+        'MATCHED DETAIL SL => '
+            '${selectedDetail['sl']}',
+      );
+
+      debugPrint(
+        'MATCHED MASTER SL => '
+            '${selectedDetail['m_sl']}',
+      );
+
+      final int beforeCount =
+          _imageUrls.length;
+
+      // ----------------------------------------------------------------------
+      // IMPORTANT:
+      // images[] প্রথমে read করছি।
+      // এতে API-এর image_no 1,2,3 ... সব image gallery-তে আসবে।
+      // ----------------------------------------------------------------------
+      final dynamic images =
+      selectedDetail['images'];
+
+      if (images is List) {
+        final List<dynamic>
+        sortedImages =
+        List<dynamic>.from(
+          images,
+        );
+
+        sortedImages.sort(
+              (
+              dynamic a,
+              dynamic b,
+              ) {
+            final int aNo =
+            a is Map
+                ? (_toInt(
+              a[
+              'image_no'],
+            ) ??
+                9999)
+                : 9999;
+
+            final int bNo =
+            b is Map
+                ? (_toInt(
+              b[
+              'image_no'],
+            ) ??
+                9999)
+                : 9999;
+
+            return aNo.compareTo(
+              bNo,
+            );
+          },
+        );
+
+        for (final dynamic rawImage
+        in sortedImages) {
+          if (rawImage is! Map) {
+            continue;
+          }
+
+          _addImageUrl(
+            rawImage['image_url'] ??
+                rawImage['file_url'],
+          );
+        }
+      }
+
+      // Fallback first image fields.
+      _addImageUrl(
+        selectedDetail['image_url'],
+      );
+
+      _addImageUrl(
+        selectedDetail['file_url'],
+      );
+
+      final int addedCount =
+          _imageUrls.length -
+              beforeCount;
+
+      debugPrint(
+        'API IMAGES ADDED => $addedCount',
+      );
+
+      debugPrint(
+        'TOTAL PRODUCT IMAGES => ${_imageUrls.length}',
+      );
+
+      for (int i = 0;
+      i < _imageUrls.length;
+      i++) {
+        debugPrint(
+          'IMAGE ${i + 1} => ${_imageUrls[i]}',
+        );
+      }
+
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (e, stackTrace) {
+      debugPrint(
+        '❌ PRODUCT IMAGE API ERROR => $e',
+      );
+      debugPrint(
+        stackTrace.toString(),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingApiImages =
+          false;
+        });
+      }
+    }
+  }
+
+  // ==========================================================================
+  // EXTRACT ALL DETAILS FROM GET RESPONSE
+  // ==========================================================================
+
+  List<Map<String, dynamic>>
+  _extractAllDetails(
+      dynamic decoded,
+      ) {
+    final List<Map<String, dynamic>>
+    result = [];
+
+    List<dynamic> masters = [];
+
+    if (decoded is List) {
+      masters = decoded;
+    } else if (decoded is Map) {
+      final dynamic data =
+          decoded['data'] ??
+              decoded['DATA'];
+
+      if (data is List) {
+        masters = data;
+      }
+    }
+
+    for (final dynamic rawMaster
+    in masters) {
+      if (rawMaster is! Map) {
+        continue;
+      }
+
+      final Map<String, dynamic>
+      master =
+      Map<String, dynamic>.from(
+        rawMaster,
+      );
+
+      final int? masterSl =
+      _toInt(
+        master['sl'] ??
+            master['master_sl'],
+      );
+
+      final dynamic details =
+      master['details'];
+
+      if (details is! List) {
+        continue;
+      }
+
+      for (final dynamic rawDetail
+      in details) {
+        if (rawDetail is! Map) {
+          continue;
+        }
+
+        final Map<String, dynamic>
+        detail =
+        Map<String, dynamic>.from(
+          rawDetail,
+        );
+
+        // Parent master fields fallback হিসেবে attach করা হচ্ছে।
+        detail.putIfAbsent(
+          'm_sl',
+              () => masterSl,
+        );
+
+        detail.putIfAbsent(
+          '_master_sl',
+              () => masterSl,
+        );
+
+        result.add(detail);
+      }
+    }
 
     return result;
   }
 
-  // ============================================================
+  // ==========================================================================
+  // FIND EXACT DETAIL
+  //
+  // Priority:
+  // 1. DETAIL SL
+  // 2. MASTER SL + ITEM CODE
+  // 3. Current product FILE_URL match
+  // 4. ITEM CODE fallback
+  // ==========================================================================
+
+  Map<String, dynamic>?
+  _findSelectedDetail(
+      List<Map<String, dynamic>>
+      details,
+      ) {
+    final int? detailSl =
+    _productDetailSl();
+
+    final int? masterSl =
+    _productMasterSl();
+
+    final String itemCode =
+    widget.product.itemCode
+        .trim();
+
+    final String productFileUrl =
+    _productFileUrl();
+
+    // ------------------------------------------------------------------------
+    // 1. DETAIL SL exact match
+    // ------------------------------------------------------------------------
+    if (detailSl != null) {
+      for (final detail
+      in details) {
+        if (_toInt(
+          detail['sl'] ??
+              detail[
+              'detail_sl'],
+        ) ==
+            detailSl) {
+          return detail;
+        }
+      }
+    }
+
+    // ------------------------------------------------------------------------
+    // 2. MASTER SL + ITEM CODE
+    // ------------------------------------------------------------------------
+    if (masterSl != null) {
+      for (final detail
+      in details) {
+        final int? rowMasterSl =
+        _toInt(
+          detail['m_sl'] ??
+              detail[
+              'master_sl'] ??
+              detail[
+              '_master_sl'],
+        );
+
+        final String rowItemCode =
+            detail['item_code']
+                ?.toString()
+                .trim() ??
+                '';
+
+        if (rowMasterSl ==
+            masterSl &&
+            rowItemCode ==
+                itemCode) {
+          return detail;
+        }
+      }
+    }
+
+    // ------------------------------------------------------------------------
+    // 3. FILE_URL exact match
+    // This solves duplicate item-code cases if ProductModel retains first file.
+    // ------------------------------------------------------------------------
+    if (productFileUrl.isNotEmpty) {
+      for (final detail
+      in details) {
+        final String rowFile =
+            detail['file_url']
+                ?.toString()
+                .trim() ??
+                '';
+
+        if (rowFile ==
+            productFileUrl) {
+          return detail;
+        }
+      }
+    }
+
+    // ------------------------------------------------------------------------
+    // 4. ITEM CODE fallback
+    // ------------------------------------------------------------------------
+    for (final detail in details) {
+      final String rowItemCode =
+          detail['item_code']
+              ?.toString()
+              .trim() ??
+              '';
+
+      if (rowItemCode ==
+          itemCode) {
+        return detail;
+      }
+    }
+
+    return null;
+  }
+
+  static int? _toInt(
+      dynamic value,
+      ) {
+    if (value == null) {
+      return null;
+    }
+
+    final String text =
+    value.toString().trim();
+
+    if (text.isEmpty) {
+      return null;
+    }
+
+    return int.tryParse(text) ??
+        double.tryParse(text)?.toInt();
+  }
+
+  // ==========================================================================
   // FULL SCREEN PREVIEW
-  // ============================================================
+  // ==========================================================================
+
   void _openFullScreenPreview(
       BuildContext context,
       String imageUrl,
       ) {
     showDialog(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.92),
-      builder: (dialogContext) {
+      barrierColor:
+      Colors.black.withOpacity(0.92),
+      builder: (
+          dialogContext,
+          ) {
         return Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.all(16),
+          backgroundColor:
+          Colors.transparent,
+          insetPadding:
+          const EdgeInsets.all(16),
           child: Stack(
             children: [
               Positioned.fill(
@@ -674,9 +1283,11 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
                           ) {
                         return const Center(
                           child: Icon(
-                            Icons.broken_image_outlined,
+                            Icons
+                                .broken_image_outlined,
                             size: 80,
-                            color: Colors.white70,
+                            color:
+                            Colors.white70,
                           ),
                         );
                       },
@@ -689,15 +1300,20 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
                 top: 8,
                 right: 8,
                 child: Material(
-                  color: Colors.black54,
-                  shape: const CircleBorder(),
+                  color:
+                  Colors.black54,
+                  shape:
+                  const CircleBorder(),
                   child: IconButton(
                     onPressed: () {
-                      Navigator.of(dialogContext).pop();
+                      Navigator.of(
+                        dialogContext,
+                      ).pop();
                     },
                     icon: const Icon(
                       Icons.close_rounded,
-                      color: Colors.white,
+                      color:
+                      Colors.white,
                     ),
                   ),
                 ),
@@ -709,9 +1325,10 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
     );
   }
 
-  // ============================================================
-  // MAIN IMAGE
-  // ============================================================
+  // ==========================================================================
+  // MAIN NETWORK IMAGE
+  // ==========================================================================
+
   Widget _buildNetworkImage(
       String imageUrl,
       ) {
@@ -723,28 +1340,34 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
         );
       },
       child: Container(
-        color: const Color(0xFFF1F3F7),
-        alignment: Alignment.center,
+        color:
+        const Color(0xFFF1F3F7),
+        alignment:
+        Alignment.center,
         child: Image.network(
           imageUrl,
-          width: double.infinity,
-          height: double.infinity,
+          width:
+          double.infinity,
+          height:
+          double.infinity,
           fit: widget.fit,
-
           loadingBuilder: (
               context,
               child,
               loadingProgress,
               ) {
-            if (loadingProgress == null) {
+            if (loadingProgress ==
+                null) {
               return child;
             }
 
-            final total =
-                loadingProgress.expectedTotalBytes;
+            final int? total =
+                loadingProgress
+                    .expectedTotalBytes;
 
             return Center(
-              child: CircularProgressIndicator(
+              child:
+              CircularProgressIndicator(
                 strokeWidth: 2.5,
                 value: total != null
                     ? loadingProgress
@@ -754,7 +1377,6 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
               ),
             );
           },
-
           errorBuilder: (
               context,
               error,
@@ -774,9 +1396,10 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
     );
   }
 
-  // ============================================================
+  // ==========================================================================
   // THUMBNAIL
-  // ============================================================
+  // ==========================================================================
+
   Widget _buildThumbnail(
       String url,
       int index,
@@ -786,28 +1409,36 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
 
     return GestureDetector(
       onTap: () {
-        _pageController.animateToPage(
+        _pageController
+            .animateToPage(
           index,
-          duration: const Duration(
+          duration:
+          const Duration(
             milliseconds: 250,
           ),
-          curve: Curves.easeOut,
+          curve:
+          Curves.easeOut,
         );
       },
       child: AnimatedContainer(
-        duration: const Duration(
+        duration:
+        const Duration(
           milliseconds: 180,
         ),
         width: 64,
         height: 64,
-        margin: const EdgeInsets.only(
+        margin:
+        const EdgeInsets.only(
           right: 8,
         ),
-        padding: const EdgeInsets.all(2),
+        padding:
+        const EdgeInsets.all(2),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius:
-          BorderRadius.circular(10),
+          BorderRadius.circular(
+            10,
+          ),
           border: Border.all(
             color: selected
                 ? Theme.of(context)
@@ -816,12 +1447,15 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
                 : const Color(
               0xFFDDE1E8,
             ),
-            width: selected ? 2 : 1,
+            width:
+            selected ? 2 : 1,
           ),
         ),
         child: ClipRRect(
           borderRadius:
-          BorderRadius.circular(7),
+          BorderRadius.circular(
+            7,
+          ),
           child: Image.network(
             url,
             fit: BoxFit.cover,
@@ -831,14 +1465,15 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
                 stackTrace,
                 ) {
               return const ColoredBox(
-                color: Color(0xFFF1F3F7),
+                color:
+                Color(0xFFF1F3F7),
                 child: Center(
                   child: Icon(
-                    Icons.broken_image_outlined,
+                    Icons
+                        .broken_image_outlined,
                     size: 20,
-                    color: Color(
-                      0xFF9AA2B1,
-                    ),
+                    color:
+                    Color(0xFF9AA2B1),
                   ),
                 ),
               );
@@ -849,22 +1484,57 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
     );
   }
 
+  // ==========================================================================
+  // GALLERY BUILD
+  // ==========================================================================
+
   @override
-  Widget build(BuildContext context) {
-    // ============================================================
+  Widget build(
+      BuildContext context,
+      ) {
+    // ------------------------------------------------------------------------
+    // NO INITIAL IMAGE + API still loading
+    // ------------------------------------------------------------------------
+    if (_imageUrls.isEmpty &&
+        _isLoadingApiImages) {
+      return SizedBox(
+        width: widget.width,
+        height: widget.height,
+        child: const Center(
+          child: Column(
+            mainAxisSize:
+            MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(
+                strokeWidth: 2.5,
+              ),
+              SizedBox(height: 12),
+              Text(
+                'Loading product images...',
+                style: TextStyle(
+                  fontSize: 12,
+                  color:
+                  Color(0xFF7A8190),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // ------------------------------------------------------------------------
     // NO IMAGE
-    // ============================================================
+    // ------------------------------------------------------------------------
     if (_imageUrls.isEmpty) {
       return SizedBox(
         width: widget.width,
         height: widget.height,
-        child: const _NoImagePlaceholder(),
+        child:
+        const _NoImagePlaceholder(),
       );
     }
 
-    // ============================================================
-    // SINGLE / MULTIPLE IMAGE
-    // ============================================================
     return SizedBox(
       width: widget.width,
       height: widget.height,
@@ -874,7 +1544,8 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
             child: Stack(
               children: [
                 Positioned.fill(
-                  child: PageView.builder(
+                  child:
+                  PageView.builder(
                     controller:
                     _pageController,
                     itemCount:
@@ -897,8 +1568,11 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
                   ),
                 ),
 
-                // Image counter
-                if (_imageUrls.length > 1)
+                // ------------------------------------------------------------
+                // IMAGE COUNTER
+                // ------------------------------------------------------------
+                if (_imageUrls.length >
+                    1)
                   Positioned(
                     top: 12,
                     right: 12,
@@ -906,12 +1580,15 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
                       padding:
                       const EdgeInsets
                           .symmetric(
-                        horizontal: 10,
-                        vertical: 6,
+                        horizontal:
+                        10,
+                        vertical:
+                        6,
                       ),
                       decoration:
                       BoxDecoration(
-                        color: Colors.black
+                        color:
+                        Colors.black
                             .withOpacity(
                           0.58,
                         ),
@@ -925,8 +1602,10 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
                         '${_currentIndex + 1}/${_imageUrls.length}',
                         style:
                         const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
+                          color:
+                          Colors.white,
+                          fontSize:
+                          12,
                           fontWeight:
                           FontWeight
                               .w700,
@@ -935,7 +1614,71 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
                     ),
                   ),
 
-                // Zoom hint
+                // ------------------------------------------------------------
+                // FETCHING MORE IMAGE INDICATOR
+                // ------------------------------------------------------------
+                if (_isLoadingApiImages)
+                  Positioned(
+                    top: 12,
+                    left: 12,
+                    child: Container(
+                      padding:
+                      const EdgeInsets
+                          .symmetric(
+                        horizontal: 9,
+                        vertical: 6,
+                      ),
+                      decoration:
+                      BoxDecoration(
+                        color:
+                        Colors.black
+                            .withOpacity(
+                          0.55,
+                        ),
+                        borderRadius:
+                        BorderRadius
+                            .circular(
+                          20,
+                        ),
+                      ),
+                      child:
+                      const Row(
+                        mainAxisSize:
+                        MainAxisSize
+                            .min,
+                        children: [
+                          SizedBox(
+                            width: 13,
+                            height: 13,
+                            child:
+                            CircularProgressIndicator(
+                              strokeWidth:
+                              1.8,
+                              color:
+                              Colors.white,
+                            ),
+                          ),
+                          SizedBox(
+                            width: 7,
+                          ),
+                          Text(
+                            'Loading images',
+                            style:
+                            TextStyle(
+                              color:
+                              Colors.white,
+                              fontSize:
+                              10,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                // ------------------------------------------------------------
+                // ZOOM ICON
+                // ------------------------------------------------------------
                 Positioned(
                   bottom: 10,
                   right: 10,
@@ -955,7 +1698,8 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
                     child: const Icon(
                       Icons.zoom_in_rounded,
                       size: 18,
-                      color: Colors.white,
+                      color:
+                      Colors.white,
                     ),
                   ),
                 ),
@@ -971,7 +1715,8 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
               height: 82,
               width: double.infinity,
               padding:
-              const EdgeInsets.fromLTRB(
+              const EdgeInsets
+                  .fromLTRB(
                 12,
                 9,
                 12,
@@ -982,8 +1727,9 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
                 color: Colors.white,
                 border: Border(
                   top: BorderSide(
-                    color:
-                    Color(0xFFE4E7EC),
+                    color: Color(
+                      0xFFE4E7EC,
+                    ),
                   ),
                 ),
               ),
@@ -1020,34 +1766,40 @@ class _ProductImageGalleryState extends State<_ProductImageGallery> {
 // NO IMAGE PLACEHOLDER
 // ============================================================================
 
-class _NoImagePlaceholder extends StatelessWidget {
+class _NoImagePlaceholder
+    extends StatelessWidget {
   const _NoImagePlaceholder();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+      BuildContext context,
+      ) {
     return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: const Color(0xFFF1F3F7),
-      child: const Center(
+      width:
+      double.infinity,
+      height:
+      double.infinity,
+      color:
+      const Color(0xFFF1F3F7),
+      child:
+      const Center(
         child: Column(
           mainAxisSize:
           MainAxisSize.min,
           children: [
             Icon(
-              Icons.image_not_supported_outlined,
+              Icons
+                  .image_not_supported_outlined,
               size: 64,
-              color: Color(
-                0xFF9AA2B1,
-              ),
+              color:
+              Color(0xFF9AA2B1),
             ),
             SizedBox(height: 10),
             Text(
               'No Image Available',
               style: TextStyle(
-                color: Color(
-                  0xFF7A8190,
-                ),
+                color:
+                Color(0xFF7A8190),
                 fontSize: 14,
                 fontWeight:
                 FontWeight.w600,
@@ -1064,34 +1816,40 @@ class _NoImagePlaceholder extends StatelessWidget {
 // IMAGE ERROR PLACEHOLDER
 // ============================================================================
 
-class _ImageErrorPlaceholder extends StatelessWidget {
+class _ImageErrorPlaceholder
+    extends StatelessWidget {
   const _ImageErrorPlaceholder();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+      BuildContext context,
+      ) {
     return Container(
-      width: double.infinity,
-      height: double.infinity,
-      color: const Color(0xFFF1F3F7),
-      child: const Center(
+      width:
+      double.infinity,
+      height:
+      double.infinity,
+      color:
+      const Color(0xFFF1F3F7),
+      child:
+      const Center(
         child: Column(
           mainAxisSize:
           MainAxisSize.min,
           children: [
             Icon(
-              Icons.broken_image_outlined,
+              Icons
+                  .broken_image_outlined,
               size: 58,
-              color: Color(
-                0xFF9AA2B1,
-              ),
+              color:
+              Color(0xFF9AA2B1),
             ),
             SizedBox(height: 8),
             Text(
               'Image unavailable',
               style: TextStyle(
-                color: Color(
-                  0xFF7A8190,
-                ),
+                color:
+                Color(0xFF7A8190),
                 fontSize: 13,
                 fontWeight:
                 FontWeight.w600,
@@ -1122,7 +1880,9 @@ class _InfoRow extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+      BuildContext context,
+      ) {
     if (value.trim().isEmpty) {
       return const SizedBox.shrink();
     }
@@ -1130,48 +1890,68 @@ class _InfoRow extends StatelessWidget {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(
+          padding:
+          const EdgeInsets
+              .symmetric(
             vertical: 14,
           ),
           child: LayoutBuilder(
-            builder: (context, constraints) {
-              // Very small width
-              if (constraints.maxWidth < 380) {
+            builder: (
+                context,
+                constraints,
+                ) {
+              if (constraints.maxWidth <
+                  380) {
                 return Column(
                   crossAxisAlignment:
-                  CrossAxisAlignment.start,
+                  CrossAxisAlignment
+                      .start,
                   children: [
                     Row(
                       children: [
                         Icon(
                           icon,
                           size: 18,
-                          color: const Color(
+                          color:
+                          const Color(
                             0xFF747B88,
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(
+                          width: 8,
+                        ),
                         Text(
                           label,
-                          style: const TextStyle(
-                            color: Color(
+                          style:
+                          const TextStyle(
+                            color:
+                            Color(
                               0xFF747B88,
                             ),
-                            fontSize: 13,
+                            fontSize:
+                            13,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 7),
+
+                    const SizedBox(
+                      height: 7,
+                    ),
+
                     Padding(
-                      padding: const EdgeInsets.only(
+                      padding:
+                      const EdgeInsets
+                          .only(
                         left: 26,
                       ),
                       child: Text(
                         value,
-                        style: const TextStyle(
+                        style:
+                        const TextStyle(
                           fontWeight:
-                          FontWeight.w700,
+                          FontWeight
+                              .w700,
                         ),
                       ),
                     ),
@@ -1181,44 +1961,58 @@ class _InfoRow extends StatelessWidget {
 
               return Row(
                 crossAxisAlignment:
-                CrossAxisAlignment.start,
+                CrossAxisAlignment
+                    .start,
                 children: [
                   Icon(
                     icon,
                     size: 19,
-                    color: const Color(
+                    color:
+                    const Color(
                       0xFF747B88,
                     ),
                   ),
 
-                  const SizedBox(width: 9),
+                  const SizedBox(
+                    width: 9,
+                  ),
 
                   SizedBox(
                     width: 125,
                     child: Text(
                       label,
-                      style: const TextStyle(
-                        color: Color(
+                      style:
+                      const TextStyle(
+                        color:
+                        Color(
                           0xFF747B88,
                         ),
-                        fontSize: 14,
+                        fontSize:
+                        14,
                       ),
                     ),
                   ),
 
-                  const SizedBox(width: 12),
+                  const SizedBox(
+                    width: 12,
+                  ),
 
                   Expanded(
                     child: Text(
                       value,
-                      textAlign: TextAlign.right,
-                      style: const TextStyle(
-                        color: Color(
+                      textAlign:
+                      TextAlign.right,
+                      style:
+                      const TextStyle(
+                        color:
+                        Color(
                           0xFF202329,
                         ),
-                        fontSize: 14,
+                        fontSize:
+                        14,
                         fontWeight:
-                        FontWeight.w700,
+                        FontWeight
+                            .w700,
                       ),
                     ),
                   ),
@@ -1231,9 +2025,8 @@ class _InfoRow extends StatelessWidget {
         if (showDivider)
           const Divider(
             height: 1,
-            color: Color(
-              0xFFEEF0F4,
-            ),
+            color:
+            Color(0xFFEEF0F4),
           ),
       ],
     );
