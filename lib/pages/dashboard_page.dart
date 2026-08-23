@@ -1,7 +1,8 @@
-
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:http/http.dart' as http;
 
 import '../controllers/product_controller.dart';
 import '../widgets/cart_icon_button.dart';
@@ -20,8 +21,21 @@ class _DashboardPageState extends State<DashboardPage> {
   final TextEditingController _searchController = TextEditingController();
 
   String _searchText = '';
-  String? _selectedBusiness;
+
+  // API category = BUSINESS
+  String? _selectedCategory;
   String? _selectedSubCategory;
+
+  // Updated GET API top-level filter metadata.
+  final List<String> _apiCategoryList = <String>[];
+  final Map<String, List<String>> _apiSubCategoryMap =
+  <String, List<String>>{};
+
+  bool _isFilterMetaLoading = false;
+
+  static const String _productApiUrl =
+      'https://e501.sihirbox.com:8071/ords/rpro/'
+      'multiline-display-room/item-upload';
 
   // ================================================================
   // IMAGE URL
@@ -31,6 +45,232 @@ class _DashboardPageState extends State<DashboardPage> {
 
   static const String _imageBaseUrl =
       'https://e501.sihirbox.com:8071/ords/rpro/image_service/get/';
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Category/Sub Category list comes from the updated GET API.
+    _loadCategoryAndSubCategory();
+  }
+
+  // ================================================================
+  // LOAD CATEGORY + CATEGORY-WISE SUB CATEGORY
+  // ================================================================
+  Future<void> _loadCategoryAndSubCategory() async {
+    if (_isFilterMetaLoading) {
+      return;
+    }
+
+    setState(() {
+      _isFilterMetaLoading = true;
+    });
+
+    try {
+      // Only 1 master row is enough here because category metadata
+      // is returned at the top level of the response.
+      final Uri uri = Uri.parse(_productApiUrl).replace(
+        queryParameters: const {
+          'p_page': '1',
+          'p_limit': '1',
+        },
+      );
+
+      debugPrint('==========================================');
+      debugPrint('LOAD CATEGORY / SUB CATEGORY');
+      debugPrint('URL => $uri');
+      debugPrint('==========================================');
+
+      final http.Response response = await http
+          .get(
+        uri,
+        headers: const {
+          'Accept': 'application/json',
+        },
+      )
+          .timeout(
+        const Duration(seconds: 60),
+      );
+
+      debugPrint(
+        'CATEGORY API STATUS => ${response.statusCode}',
+      );
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
+        throw Exception(
+          'HTTP ${response.statusCode}',
+        );
+      }
+
+      final dynamic decoded =
+      jsonDecode(response.body);
+
+      if (decoded is! Map) {
+        throw Exception(
+          'Invalid category API response.',
+        );
+      }
+
+      // --------------------------------------------------------------
+      // CATEGORY LIST
+      // --------------------------------------------------------------
+      final List<String> categories =
+      <String>[];
+
+      final dynamic rawCategories =
+      decoded['category_list'];
+
+      if (rawCategories is List) {
+        for (final dynamic value
+        in rawCategories) {
+          final String category =
+              value?.toString().trim() ?? '';
+
+          if (category.isNotEmpty &&
+              !categories.contains(category)) {
+            categories.add(category);
+          }
+        }
+      }
+
+      categories.sort(
+            (a, b) => a
+            .toLowerCase()
+            .compareTo(
+          b.toLowerCase(),
+        ),
+      );
+
+      // --------------------------------------------------------------
+      // CATEGORY-WISE SUB CATEGORY
+      // --------------------------------------------------------------
+      final Map<String, List<String>>
+      subCategoryMap =
+      <String, List<String>>{};
+
+      final dynamic rawCategoryWise =
+      decoded[
+      'category_wise_sub_category_list'];
+
+      if (rawCategoryWise is List) {
+        for (final dynamic row
+        in rawCategoryWise) {
+          if (row is! Map) {
+            continue;
+          }
+
+          final String category =
+              row['category']
+                  ?.toString()
+                  .trim() ??
+                  '';
+
+          if (category.isEmpty) {
+            continue;
+          }
+
+          final List<String> subCategories =
+          <String>[];
+
+          final dynamic rawSubs =
+          row['sub_categories'];
+
+          if (rawSubs is List) {
+            for (final dynamic subValue
+            in rawSubs) {
+              final String subCategory =
+                  subValue
+                      ?.toString()
+                      .trim() ??
+                      '';
+
+              if (subCategory.isNotEmpty &&
+                  !subCategories.contains(
+                    subCategory,
+                  )) {
+                subCategories.add(
+                  subCategory,
+                );
+              }
+            }
+          }
+
+          subCategories.sort(
+                (a, b) => a
+                .toLowerCase()
+                .compareTo(
+              b.toLowerCase(),
+            ),
+          );
+
+          subCategoryMap[category] =
+              subCategories;
+        }
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _apiCategoryList
+          ..clear()
+          ..addAll(categories);
+
+        _apiSubCategoryMap
+          ..clear()
+          ..addAll(subCategoryMap);
+
+        // If a refresh removes the selected category, clear filters.
+        if (_selectedCategory != null &&
+            !_apiCategoryList.contains(
+              _selectedCategory,
+            )) {
+          _selectedCategory = null;
+          _selectedSubCategory = null;
+        }
+
+        if (_selectedCategory != null &&
+            _selectedSubCategory != null) {
+          final List<String> validSubs =
+              _apiSubCategoryMap[
+              _selectedCategory] ??
+                  const <String>[];
+
+          if (!validSubs.contains(
+            _selectedSubCategory,
+          )) {
+            _selectedSubCategory = null;
+          }
+        }
+      });
+
+      debugPrint(
+        'CATEGORY COUNT => ${_apiCategoryList.length}',
+      );
+
+      debugPrint(
+        'CATEGORY MAP => $_apiSubCategoryMap',
+      );
+    } catch (e, stackTrace) {
+      debugPrint(
+        'CATEGORY API ERROR => $e',
+      );
+      debugPrint(
+        stackTrace.toString(),
+      );
+
+      // No blocking error:
+      // getters below automatically fall back to controller.products.
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isFilterMetaLoading = false;
+        });
+      }
+    }
+  }
 
   // ================================================================
   // SAFE VALUE READER
@@ -564,10 +804,10 @@ class _DashboardPageState extends State<DashboardPage> {
               organizationCode.toLowerCase().contains(search) ||
               status.toLowerCase().contains(search);
 
-      final bool matchesBusiness =
-          _selectedBusiness == null ||
-              _selectedBusiness!.isEmpty ||
-              business == _selectedBusiness;
+      final bool matchesCategory =
+          _selectedCategory == null ||
+              _selectedCategory!.isEmpty ||
+              business == _selectedCategory;
 
       final bool matchesSubCategory =
           _selectedSubCategory == null ||
@@ -575,16 +815,26 @@ class _DashboardPageState extends State<DashboardPage> {
               subCategory == _selectedSubCategory;
 
       return matchesSearch &&
-          matchesBusiness &&
+          matchesCategory &&
           matchesSubCategory;
     }).toList();
   }
 
   // ================================================================
-  // BUSINESS LIST
+  // CATEGORY LIST
+  //
+  // API category = master BUSINESS
   // ================================================================
-  List<String> get businessList {
-    final List<String> list = controller.products
+  List<String> get categoryList {
+    if (_apiCategoryList.isNotEmpty) {
+      return List<String>.from(
+        _apiCategoryList,
+      );
+    }
+
+    // Fallback if metadata API fails.
+    final List<String> list =
+    controller.products
         .map(
           (item) => _getValue(
         item,
@@ -592,21 +842,56 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     )
         .where(
-          (value) => value.trim().isNotEmpty,
+          (value) =>
+      value.trim().isNotEmpty,
     )
         .toSet()
         .toList();
 
-    list.sort();
+    list.sort(
+          (a, b) => a
+          .toLowerCase()
+          .compareTo(
+        b.toLowerCase(),
+      ),
+    );
 
     return list;
   }
 
   // ================================================================
-  // SUB CATEGORY LIST
+  // SELECTED CATEGORY-WISE SUB CATEGORY LIST
   // ================================================================
   List<String> get subCategoryList {
-    final List<String> list = controller.products
+    final String? category =
+        _selectedCategory;
+
+    if (category == null ||
+        category.trim().isEmpty) {
+      return const <String>[];
+    }
+
+    // First priority: updated GET API metadata.
+    final List<String>? apiList =
+    _apiSubCategoryMap[category];
+
+    if (apiList != null) {
+      return List<String>.from(
+        apiList,
+      );
+    }
+
+    // Fallback: derive from loaded products.
+    final List<String> list =
+    controller.products
+        .where(
+          (item) =>
+      _getValue(
+        item,
+        'business',
+      ) ==
+          category,
+    )
         .map(
           (item) => _getValue(
         item,
@@ -614,12 +899,19 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     )
         .where(
-          (value) => value.trim().isNotEmpty,
+          (value) =>
+      value.trim().isNotEmpty,
     )
         .toSet()
         .toList();
 
-    list.sort();
+    list.sort(
+          (a, b) => a
+          .toLowerCase()
+          .compareTo(
+        b.toLowerCase(),
+      ),
+    );
 
     return list;
   }
@@ -632,15 +924,312 @@ class _DashboardPageState extends State<DashboardPage> {
 
     setState(() {
       _searchText = '';
-      _selectedBusiness = null;
+      _selectedCategory = null;
       _selectedSubCategory = null;
     });
   }
 
   bool get _hasFilter {
     return _searchText.trim().isNotEmpty ||
-        _selectedBusiness != null ||
+        _selectedCategory != null ||
         _selectedSubCategory != null;
+  }
+
+  // ================================================================
+  // TOP CATEGORY / SUB CATEGORY / SEARCH BAR
+  // ================================================================
+  Widget _buildTopFilterBar() {
+    final List<String> categories =
+        categoryList;
+
+    final List<String> subCategories =
+        subCategoryList;
+
+    final String? safeCategory =
+    _selectedCategory != null &&
+        categories.contains(
+          _selectedCategory,
+        )
+        ? _selectedCategory
+        : null;
+
+    final String? safeSubCategory =
+    _selectedSubCategory != null &&
+        subCategories.contains(
+          _selectedSubCategory,
+        )
+        ? _selectedSubCategory
+        : null;
+
+    Widget searchField = SizedBox(
+      width: 330,
+      child: TextField(
+        controller: _searchController,
+        onChanged: (value) {
+          setState(() {
+            _searchText = value;
+          });
+        },
+        decoration: InputDecoration(
+          hintText:
+          'Search description, item code...',
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+          ),
+          suffixIcon: _searchText.isNotEmpty
+              ? IconButton(
+            tooltip: 'Clear Search',
+            onPressed: () {
+              _searchController.clear();
+
+              setState(() {
+                _searchText = '';
+              });
+            },
+            icon: const Icon(
+              Icons.close_rounded,
+            ),
+          )
+              : null,
+          isDense: true,
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius:
+            BorderRadius.circular(12),
+          ),
+          enabledBorder:
+          OutlineInputBorder(
+            borderRadius:
+            BorderRadius.circular(12),
+            borderSide:
+            const BorderSide(
+              color: Color(0xFFE3E6EC),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Widget categoryDropdown = SizedBox(
+      width: 220,
+      child:
+      DropdownButtonFormField<String>(
+        value: safeCategory,
+        isExpanded: true,
+        hint: Text(
+          _isFilterMetaLoading
+              ? 'Loading...'
+              : 'All Categories',
+        ),
+        decoration: InputDecoration(
+          labelText: 'Category',
+          prefixIcon: const Icon(
+            Icons.category_outlined,
+          ),
+          isDense: true,
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius:
+            BorderRadius.circular(12),
+          ),
+          enabledBorder:
+          OutlineInputBorder(
+            borderRadius:
+            BorderRadius.circular(12),
+            borderSide:
+            const BorderSide(
+              color: Color(0xFFE3E6EC),
+            ),
+          ),
+        ),
+        items: categories
+            .map(
+              (category) =>
+              DropdownMenuItem<String>(
+                value: category,
+                child: Text(
+                  category,
+                  overflow:
+                  TextOverflow.ellipsis,
+                ),
+              ),
+        )
+            .toList(),
+        onChanged:
+        _isFilterMetaLoading
+            ? null
+            : (value) {
+          setState(() {
+            _selectedCategory =
+                value;
+
+            // Category changes =>
+            // reset dependent sub category.
+            _selectedSubCategory =
+            null;
+          });
+        },
+      ),
+    );
+
+    Widget subCategoryDropdown =
+    SizedBox(
+      width: 220,
+      child:
+      DropdownButtonFormField<String>(
+        value: safeSubCategory,
+        isExpanded: true,
+        hint: Text(
+          safeCategory == null
+              ? 'Select Category First'
+              : subCategories.isEmpty
+              ? 'No Sub Category'
+              : 'All Sub Categories',
+        ),
+        decoration: InputDecoration(
+          labelText: 'Sub Category',
+          prefixIcon: const Icon(
+            Icons.account_tree_outlined,
+          ),
+          isDense: true,
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius:
+            BorderRadius.circular(12),
+          ),
+          enabledBorder:
+          OutlineInputBorder(
+            borderRadius:
+            BorderRadius.circular(12),
+            borderSide:
+            const BorderSide(
+              color: Color(0xFFE3E6EC),
+            ),
+          ),
+        ),
+        items: subCategories
+            .map(
+              (subCategory) =>
+              DropdownMenuItem<String>(
+                value: subCategory,
+                child: Text(
+                  subCategory,
+                  overflow:
+                  TextOverflow.ellipsis,
+                ),
+              ),
+        )
+            .toList(),
+        onChanged: safeCategory == null
+            ? null
+            : (value) {
+          setState(() {
+            _selectedSubCategory =
+                value;
+          });
+        },
+      ),
+    );
+
+    return Container(
+      width: double.infinity,
+      padding:
+      const EdgeInsets.fromLTRB(
+        16,
+        14,
+        16,
+        10,
+      ),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF7F8FA),
+        border: Border(
+          bottom: BorderSide(
+            color: Color(0xFFE8EAEE),
+          ),
+        ),
+      ),
+      child: LayoutBuilder(
+        builder: (
+            context,
+            constraints,
+            ) {
+          final bool compact =
+              constraints.maxWidth < 900;
+
+          if (compact) {
+            return Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                SizedBox(
+                  width:
+                  constraints.maxWidth,
+                  child: searchField,
+                ),
+                SizedBox(
+                  width: constraints.maxWidth < 520
+                      ? constraints.maxWidth
+                      : (constraints.maxWidth -
+                      10) /
+                      2,
+                  child:
+                  categoryDropdown,
+                ),
+                SizedBox(
+                  width: constraints.maxWidth < 520
+                      ? constraints.maxWidth
+                      : (constraints.maxWidth -
+                      10) /
+                      2,
+                  child:
+                  subCategoryDropdown,
+                ),
+                if (_hasFilter)
+                  OutlinedButton.icon(
+                    onPressed:
+                    _resetFilters,
+                    icon: const Icon(
+                      Icons
+                          .restart_alt_rounded,
+                    ),
+                    label: const Text(
+                      'Reset',
+                    ),
+                  ),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              Expanded(
+                child: searchField,
+              ),
+              const SizedBox(width: 10),
+              categoryDropdown,
+              const SizedBox(width: 10),
+              subCategoryDropdown,
+              if (_hasFilter) ...[
+                const SizedBox(width: 10),
+                OutlinedButton.icon(
+                  onPressed:
+                  _resetFilters,
+                  icon: const Icon(
+                    Icons
+                        .restart_alt_rounded,
+                  ),
+                  label:
+                  const Text('Reset'),
+                ),
+              ],
+            ],
+          );
+        },
+      ),
+    );
   }
 
   // ================================================================
@@ -702,148 +1291,155 @@ class _DashboardPageState extends State<DashboardPage> {
         ],
       ),
 
-      body: Obx(() {
-        // ============================================================
-        // LOADING
-        // ============================================================
-        if (controller.isLoading.value &&
-            controller.products.isEmpty) {
-          return const Center(
-            child: CircularProgressIndicator(),
-          );
-        }
-
-        // ============================================================
-        // ERROR
-        // ============================================================
-        if (controller.errorMessage.value.isNotEmpty &&
-            controller.products.isEmpty) {
-          return _ErrorView(
-            message: controller.errorMessage.value,
-            onRetry: controller.fetchProducts,
-          );
-        }
-
-        // ============================================================
-        // EMPTY
-        // ============================================================
-        if (controller.products.isEmpty) {
-          return RefreshIndicator(
-            onRefresh: controller.fetchProducts,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: const [
-                SizedBox(height: 220),
-                Icon(
-                  Icons.inventory_2_outlined,
-                  size: 70,
-                  color: Color(0xFF9AA2B1),
-                ),
-                SizedBox(height: 12),
-                Center(
-                  child: Text(
-                    'No product found',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        final List<dynamic> products =
-            filteredProducts;
-
-        // ============================================================
-        // FILTER EMPTY
-        // ============================================================
-        if (products.isEmpty) {
-          return RefreshIndicator(
-            onRefresh: controller.fetchProducts,
-            child: ListView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              children: [
-                const SizedBox(height: 180),
-                const Icon(
-                  Icons.filter_alt_off_outlined,
-                  size: 70,
-                  color: Color(0xFF9AA2B1),
-                ),
-                const SizedBox(height: 16),
-                const Center(
-                  child: Text(
-                    'No matching product found',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Center(
-                  child: OutlinedButton.icon(
-                    onPressed: _resetFilters,
-                    icon: const Icon(
-                      Icons.restart_alt,
-                    ),
-                    label: const Text(
-                      'Reset Filters',
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }
-
-        // ============================================================
-        // PRODUCT GRID
-        // ============================================================
-        return RefreshIndicator(
-          onRefresh: controller.fetchProducts,
-          child: LayoutBuilder(
-            builder: (
-                BuildContext context,
-                BoxConstraints constraints,
-                ) {
-              int crossAxisCount = 1;
-
-              if (constraints.maxWidth >= 1400) {
-                crossAxisCount = 4;
-              } else if (constraints.maxWidth >= 1000) {
-                crossAxisCount = 3;
-              } else if (constraints.maxWidth >= 650) {
-                crossAxisCount = 2;
+      body: Column(
+        children: [
+          _buildTopFilterBar(),
+          Expanded(
+            child: Obx(() {
+              // ============================================================
+              // LOADING
+              // ============================================================
+              if (controller.isLoading.value &&
+                  controller.products.isEmpty) {
+                return const Center(
+                  child: CircularProgressIndicator(),
+                );
               }
 
-              return GridView.builder(
-                padding: const EdgeInsets.all(16),
-                physics:
-                const AlwaysScrollableScrollPhysics(),
-                gridDelegate:
-                SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: crossAxisCount,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  mainAxisExtent: 410,
+              // ============================================================
+              // ERROR
+              // ============================================================
+              if (controller.errorMessage.value.isNotEmpty &&
+                  controller.products.isEmpty) {
+                return _ErrorView(
+                  message: controller.errorMessage.value,
+                  onRetry: controller.fetchProducts,
+                );
+              }
+
+              // ============================================================
+              // EMPTY
+              // ============================================================
+              if (controller.products.isEmpty) {
+                return RefreshIndicator(
+                  onRefresh: controller.fetchProducts,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: const [
+                      SizedBox(height: 220),
+                      Icon(
+                        Icons.inventory_2_outlined,
+                        size: 70,
+                        color: Color(0xFF9AA2B1),
+                      ),
+                      SizedBox(height: 12),
+                      Center(
+                        child: Text(
+                          'No product found',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              final List<dynamic> products =
+                  filteredProducts;
+
+              // ============================================================
+              // FILTER EMPTY
+              // ============================================================
+              if (products.isEmpty) {
+                return RefreshIndicator(
+                  onRefresh: controller.fetchProducts,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: [
+                      const SizedBox(height: 180),
+                      const Icon(
+                        Icons.filter_alt_off_outlined,
+                        size: 70,
+                        color: Color(0xFF9AA2B1),
+                      ),
+                      const SizedBox(height: 16),
+                      const Center(
+                        child: Text(
+                          'No matching product found',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Center(
+                        child: OutlinedButton.icon(
+                          onPressed: _resetFilters,
+                          icon: const Icon(
+                            Icons.restart_alt,
+                          ),
+                          label: const Text(
+                            'Reset Filters',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              // ============================================================
+              // PRODUCT GRID
+              // ============================================================
+              return RefreshIndicator(
+                onRefresh: controller.fetchProducts,
+                child: LayoutBuilder(
+                  builder: (
+                      BuildContext context,
+                      BoxConstraints constraints,
+                      ) {
+                    int crossAxisCount = 1;
+
+                    if (constraints.maxWidth >= 1400) {
+                      crossAxisCount = 4;
+                    } else if (constraints.maxWidth >= 1000) {
+                      crossAxisCount = 3;
+                    } else if (constraints.maxWidth >= 650) {
+                      crossAxisCount = 2;
+                    }
+
+                    return GridView.builder(
+                      padding: const EdgeInsets.all(16),
+                      physics:
+                      const AlwaysScrollableScrollPhysics(),
+                      gridDelegate:
+                      SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossAxisCount,
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                        mainAxisExtent: 410,
+                      ),
+                      itemCount: products.length,
+                      itemBuilder: (
+                          BuildContext context,
+                          int index,
+                          ) {
+                        return _buildProductCard(
+                          products[index],
+                        );
+                      },
+                    );
+                  },
                 ),
-                itemCount: products.length,
-                itemBuilder: (
-                    BuildContext context,
-                    int index,
-                    ) {
-                  return _buildProductCard(
-                    products[index],
-                  );
-                },
               );
-            },
+            }),
           ),
-        );
-      }),
+        ],
+      ),
     );
   }
 
@@ -1261,18 +1857,18 @@ class _DashboardPageState extends State<DashboardPage> {
   // FILTER DRAWER
   // ================================================================
   Widget _buildFilterDrawer() {
-    final List<String> businesses =
-        businessList;
+    final List<String> categories =
+        categoryList;
 
     final List<String> subCategories =
         subCategoryList;
 
-    final String? safeBusiness =
-    _selectedBusiness != null &&
-        businesses.contains(
-          _selectedBusiness,
+    final String? safeCategory =
+    _selectedCategory != null &&
+        categories.contains(
+          _selectedCategory,
         )
-        ? _selectedBusiness
+        ? _selectedCategory
         : null;
 
     final String? safeSubCategory =
@@ -1400,7 +1996,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       decoration:
                       InputDecoration(
                         hintText:
-                        'Description, item code, business...',
+                        'Description, item code, category...',
                         prefixIcon:
                         const Icon(
                           Icons.search_rounded,
@@ -1461,10 +2057,10 @@ class _DashboardPageState extends State<DashboardPage> {
                     const SizedBox(height: 24),
 
                     // ==================================================
-                    // BUSINESS
+                    // CATEGORY
                     // ==================================================
                     const Text(
-                      'Business',
+                      'Category',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight:
@@ -1476,17 +2072,17 @@ class _DashboardPageState extends State<DashboardPage> {
 
                     DropdownButtonFormField<
                         String>(
-                      value: safeBusiness,
+                      value: safeCategory,
                       isExpanded: true,
                       hint: const Text(
-                        'All Businesses',
+                        'All Categories',
                       ),
                       decoration:
                       InputDecoration(
                         prefixIcon:
                         const Icon(
                           Icons
-                              .business_outlined,
+                              .category_outlined,
                         ),
                         border:
                         OutlineInputBorder(
@@ -1511,16 +2107,16 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                         ),
                       ),
-                      items: businesses
+                      items: categories
                           .map(
                             (
-                            business,
+                            category,
                             ) =>
                             DropdownMenuItem<
                                 String>(
-                              value: business,
+                              value: category,
                               child: Text(
-                                business,
+                                category,
                                 overflow:
                                 TextOverflow
                                     .ellipsis,
@@ -1528,10 +2124,15 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
                       )
                           .toList(),
-                      onChanged: (value) {
+                      onChanged:
+                      _isFilterMetaLoading
+                          ? null
+                          : (value) {
                         setState(() {
-                          _selectedBusiness =
+                          _selectedCategory =
                               value;
+                          _selectedSubCategory =
+                          null;
                         });
                       },
                     ),
@@ -1557,8 +2158,12 @@ class _DashboardPageState extends State<DashboardPage> {
                       value:
                       safeSubCategory,
                       isExpanded: true,
-                      hint: const Text(
-                        'All Sub Categories',
+                      hint: Text(
+                        safeCategory == null
+                            ? 'Select Category First'
+                            : subCategories.isEmpty
+                            ? 'No Sub Category'
+                            : 'All Sub Categories',
                       ),
                       decoration:
                       InputDecoration(
@@ -1607,7 +2212,10 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
                       )
                           .toList(),
-                      onChanged: (value) {
+                      onChanged:
+                      safeCategory == null
+                          ? null
+                          : (value) {
                         setState(() {
                           _selectedSubCategory =
                               value;
