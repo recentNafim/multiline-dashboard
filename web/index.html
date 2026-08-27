@@ -1,71 +1,21 @@
-<!--<!DOCTYPE html>-->
-<!--<html>-->
-<!--<head>-->
-<!--  &lt;!&ndash;-->
-<!--    If you are serving your web app in a path other than the root, change the-->
-<!--    href value below to reflect the base path you are serving from.-->
-
-<!--    The path provided below has to start and end with a slash "/" in order for-->
-<!--    it to work correctly.-->
-
-<!--    For more details:-->
-<!--    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base-->
-
-<!--    This is a placeholder for base href that will be replaced by the value of-->
-<!--    the `&#45;&#45;base-href` argument provided to `flutter build`.-->
-<!--  &ndash;&gt;-->
-<!--  <base href="$FLUTTER_BASE_HREF">-->
-
-<!--  <meta charset="UTF-8">-->
-<!--  <meta content="IE=Edge" http-equiv="X-UA-Compatible">-->
-<!--  <meta name="description" content="A new Flutter project.">-->
-
-<!--  &lt;!&ndash; iOS meta tags & icons &ndash;&gt;-->
-<!--  <meta name="mobile-web-app-capable" content="yes">-->
-<!--  <meta name="apple-mobile-web-app-status-bar-style" content="black">-->
-<!--  <meta name="apple-mobile-web-app-title" content="multiline_user_display">-->
-<!--  <link rel="apple-touch-icon" href="icons/Icon-192.png">-->
-
-<!--  &lt;!&ndash; Favicon &ndash;&gt;-->
-<!--  <link rel="icon" type="image/png" href="favicon.png"/>-->
-
-<!--  <title>multiline_user_display</title>-->
-<!--  <link rel="manifest" href="manifest.json">-->
-<!--</head>-->
-<!--<body>-->
-<!--  <script src="flutter_bootstrap.js" async></script>-->
-<!--</body>-->
-<!--</html>-->
-
-
-
 <!DOCTYPE html>
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
 
   <meta
-          content="IE=Edge"
-          http-equiv="X-UA-Compatible">
+          http-equiv="X-UA-Compatible"
+          content="IE=Edge">
 
   <meta
           name="description"
           content="Display Room Product Catalogue">
+
+  <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1">
 
   <!-- ============================================================ -->
   <!-- MOBILE / IOS -->
@@ -94,7 +44,7 @@
   <link
           rel="icon"
           type="image/png"
-          href="favicon.png"/>
+          href="favicon.png">
 
   <!-- ============================================================ -->
   <!-- TITLE -->
@@ -106,6 +56,17 @@
           rel="manifest"
           href="manifest.json">
 
+  <!-- ============================================================ -->
+  <!-- 3D MODEL VIEWER -->
+  <!-- REQUIRED FOR model_viewer_plus ON FLUTTER WEB -->
+  <!-- ============================================================ -->
+
+  <script
+          type="module"
+          src="./assets/packages/model_viewer_plus/assets/model-viewer.min.js"
+          defer>
+  </script>
+
 </head>
 
 <body>
@@ -114,15 +75,12 @@
 <!-- PPTX GEN JS -->
 <!-- ============================================================ -->
 
-<!--
-  PowerPoint .pptx generation library
--->
 <script
         src="https://cdn.jsdelivr.net/npm/pptxgenjs/dist/pptxgen.bundle.js">
 </script>
 
 <!-- ============================================================ -->
-<!-- OUR CUSTOM PPTX GENERATOR -->
+<!-- CUSTOM PPTX GENERATOR -->
 <!-- ============================================================ -->
 
 <script src="pptx_generator.js"></script>

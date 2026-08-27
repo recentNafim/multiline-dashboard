@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
+import 'package:model_viewer_plus/model_viewer_plus.dart';
 
 import '../controllers/cart_controller.dart';
 import '../models/product_model.dart';
@@ -464,6 +465,18 @@ class _ProductImageGalleryState
   final Set<String> _uniqueUrls =
   <String>{};
 
+  // Optional 3D model returned by GET API: details[].model_3d
+  String _modelUrl = '';
+  String _modelFileName = '';
+  bool _show3DModel = false;
+
+  // 3D model diagnostics / loading state.
+  bool _isChecking3DModel = false;
+  bool _is3DModelVerified = false;
+  String _modelLoadError = '';
+  String _modelContentType = '';
+  int _modelByteLength = 0;
+
   @override
   void initState() {
     super.initState();
@@ -524,6 +537,189 @@ class _ProductImageGalleryState
 
     return '$_imageBaseUrl$encodedPath';
   }
+
+  // ==========================================================================
+  // NORMALIZE 3D MODEL URL
+  // ==========================================================================
+
+  String _normalizeModelUrl(
+      dynamic value,
+      ) {
+    if (value == null) {
+      return '';
+    }
+
+    String url = value.toString().trim();
+
+    if (url.isEmpty || url.toLowerCase() == 'null') {
+      return '';
+    }
+
+    if (url.startsWith('https://') || url.startsWith('http://')) {
+      return url;
+    }
+
+    while (url.startsWith('/')) {
+      url = url.substring(1);
+    }
+
+    if (url.isEmpty) {
+      return '';
+    }
+
+    if (url.startsWith('ords/')) {
+      return '$_serverBaseUrl/$url';
+    }
+
+    final String encodedPath = url
+        .split('/')
+        .where((part) => part.isNotEmpty)
+        .map(Uri.encodeComponent)
+        .join('/');
+
+    if (encodedPath.isEmpty) {
+      return '';
+    }
+
+    return '$_imageBaseUrl$encodedPath';
+  }
+
+  // ==========================================================================
+  // CHECK / VALIDATE 3D MODEL FILE
+  //
+  // This does a real HTTP GET so the UI can clearly tell whether the GLB
+  // actually reached the browser. It also validates the GLB magic header
+  // ("glTF" = 67 6C 54 46).
+  // ==========================================================================
+
+  Future<void> _check3DModelAvailability({
+    bool force = false,
+  }) async {
+    if (_modelUrl.isEmpty) {
+      return;
+    }
+
+    if (_isChecking3DModel) {
+      return;
+    }
+
+    if (_is3DModelVerified && !force) {
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isChecking3DModel = true;
+        _modelLoadError = '';
+        if (force) {
+          _is3DModelVerified = false;
+          _modelContentType = '';
+          _modelByteLength = 0;
+        }
+      });
+    }
+
+    try {
+      debugPrint('==========================================');
+      debugPrint('CHECK 3D MODEL FILE');
+      debugPrint('MODEL URL => $_modelUrl');
+      debugPrint('==========================================');
+
+      final http.Response response = await http
+          .get(
+        Uri.parse(_modelUrl),
+        headers: const {
+          'Accept':
+          'model/gltf-binary,application/octet-stream,*/*',
+        },
+      )
+          .timeout(
+        const Duration(seconds: 60),
+      );
+
+      final String contentType =
+          response.headers['content-type']?.trim() ?? '';
+
+      debugPrint('3D MODEL HTTP => ${response.statusCode}');
+      debugPrint('3D MODEL CONTENT-TYPE => $contentType');
+      debugPrint('3D MODEL BYTES => ${response.bodyBytes.length}');
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
+        throw Exception(
+          'HTTP ${response.statusCode}: 3D model file পাওয়া যায়নি',
+        );
+      }
+
+      final bytes = response.bodyBytes;
+
+      if (bytes.length < 12) {
+        throw Exception(
+          'Invalid GLB: file size খুব ছোট (${bytes.length} bytes)',
+        );
+      }
+
+      final bool hasGlbMagic =
+          bytes[0] == 0x67 &&
+              bytes[1] == 0x6C &&
+              bytes[2] == 0x54 &&
+              bytes[3] == 0x46;
+
+      if (!hasGlbMagic) {
+        throw Exception(
+          'Invalid GLB: "glTF" header পাওয়া যায়নি. '
+              'Server হয়তো GLB-এর বদলে HTML/JSON response দিচ্ছে.',
+        );
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _is3DModelVerified = true;
+        _modelContentType = contentType;
+        _modelByteLength = bytes.length;
+        _modelLoadError = '';
+      });
+
+      debugPrint('✅ 3D MODEL GLB VERIFIED');
+    } catch (e, stackTrace) {
+      debugPrint('❌ 3D MODEL CHECK ERROR => $e');
+      debugPrint(stackTrace.toString());
+
+      String message = e.toString();
+
+      if (message.startsWith('Exception: ')) {
+        message = message.substring('Exception: '.length);
+      }
+
+      final String lower = message.toLowerCase();
+
+      if (lower.contains('xmlhttprequest') ||
+          lower.contains('cors') ||
+          lower.contains('failed to fetch') ||
+          lower.contains('clientexception')) {
+        message =
+        '$message\n\nPossible CORS problem: GLB response-এ '
+            'Access-Control-Allow-Origin header প্রয়োজন.';
+      }
+
+      if (mounted) {
+        setState(() {
+          _is3DModelVerified = false;
+          _modelLoadError = message;
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isChecking3DModel = false;
+        });
+      }
+    }
+  }
+
 
   // ==========================================================================
   // ADD UNIQUE IMAGE
@@ -925,6 +1121,29 @@ class _ProductImageGalleryState
             '${selectedDetail['m_sl']}',
       );
 
+      // ----------------------------------------------------------------------
+      // OPTIONAL 3D MODEL
+      // ----------------------------------------------------------------------
+      final dynamic rawModel3D = selectedDetail['model_3d'];
+
+      if (rawModel3D is Map) {
+        final String normalizedModelUrl = _normalizeModelUrl(
+          rawModel3D['model_url'] ?? rawModel3D['file_url'],
+        );
+
+        if (normalizedModelUrl.isNotEmpty) {
+          _modelUrl = normalizedModelUrl;
+          _modelFileName = rawModel3D['file_name']?.toString().trim() ?? '';
+
+          debugPrint('3D MODEL URL => $_modelUrl');
+          debugPrint('3D MODEL FILE => $_modelFileName');
+
+          // Real network + GLB validation.
+          // Await করা হচ্ছে যাতে 3D tab-এ গেলে loading / error status clear থাকে.
+          await _check3DModelAvailability();
+        }
+      }
+
       final int beforeCount =
           _imageUrls.length;
 
@@ -1012,6 +1231,10 @@ class _ProductImageGalleryState
         debugPrint(
           'IMAGE ${i + 1} => ${_imageUrls[i]}',
         );
+      }
+
+      if (_imageUrls.isEmpty && _modelUrl.isNotEmpty) {
+        _show3DModel = true;
       }
 
       if (mounted) {
@@ -1397,6 +1620,269 @@ class _ProductImageGalleryState
   }
 
   // ==========================================================================
+  // 3D MODEL VIEWER
+  // ==========================================================================
+
+  Widget _build3DModelViewer() {
+    if (_modelUrl.isEmpty) {
+      return const _NoImagePlaceholder();
+    }
+
+    // ------------------------------------------------------------
+    // MODEL FILE CHECKING
+    // ------------------------------------------------------------
+    if (_isChecking3DModel) {
+      return Container(
+        color: const Color(0xFFF1F3F7),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(24),
+        child: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 34,
+              height: 34,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+              ),
+            ),
+            SizedBox(height: 14),
+            Text(
+              'Checking 3D model...',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            SizedBox(height: 6),
+            Text(
+              'GLB file server থেকে load হচ্ছে',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                color: Color(0xFF7A8190),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // ------------------------------------------------------------
+    // MODEL FILE ERROR
+    // ------------------------------------------------------------
+    if (_modelLoadError.isNotEmpty) {
+      return Container(
+        color: const Color(0xFFF1F3F7),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            maxWidth: 460,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.view_in_ar_outlined,
+                size: 54,
+                color: Color(0xFF9AA2B1),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                '3D model load failed',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _modelLoadError,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 12,
+                  height: 1.45,
+                  color: Color(0xFF6F7785),
+                ),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () {
+                  _check3DModelAvailability(
+                    force: true,
+                  );
+                },
+                icon: const Icon(
+                  Icons.refresh_rounded,
+                  size: 18,
+                ),
+                label: const Text(
+                  'Retry 3D Model',
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // ------------------------------------------------------------
+    // MODEL FILE VERIFIED -> RENDER
+    // ------------------------------------------------------------
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Container(
+            color: const Color(0xFFF1F3F7),
+            child: ModelViewer(
+              key: ValueKey(_modelUrl),
+              src: _modelUrl,
+              alt: _modelFileName.isNotEmpty
+                  ? _modelFileName
+                  : 'Product 3D model',
+              ar: false,
+              autoRotate: true,
+              cameraControls: true,
+
+              // Force immediate loading. Default is lazy/auto and on some
+              // Flutter Web layouts it can appear blank for a long time.
+              loading: Loading.eager,
+              reveal: Reveal.auto,
+
+              // While the renderer initializes, show the first product image
+              // instead of a completely empty panel.
+              poster:
+              _imageUrls.isNotEmpty ? _imageUrls.first : null,
+
+              backgroundColor:
+              const Color(0xFFF1F3F7),
+            ),
+          ),
+        ),
+
+        // ----------------------------------------------------------
+        // NETWORK / GLB STATUS
+        // ----------------------------------------------------------
+        if (_is3DModelVerified)
+          Positioned(
+            left: 12,
+            bottom: 12,
+            child: Container(
+              constraints: const BoxConstraints(
+                maxWidth: 330,
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 7,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.62),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    size: 15,
+                    color: Colors.white,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      'GLB loaded • ${_formatBytes(_modelByteLength)}'
+                          '${_modelContentType.isNotEmpty ? ' • $_modelContentType' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  static String _formatBytes(int bytes) {
+    if (bytes <= 0) {
+      return '0 B';
+    }
+
+    if (bytes < 1024) {
+      return '$bytes B';
+    }
+
+    final double kb = bytes / 1024;
+
+    if (kb < 1024) {
+      return '${kb.toStringAsFixed(1)} KB';
+    }
+
+    final double mb = kb / 1024;
+
+    return '${mb.toStringAsFixed(2)} MB';
+  }
+
+
+  // ==========================================================================
+  // 3D MODEL THUMBNAIL
+  // ==========================================================================
+
+  Widget _build3DThumbnail() {
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _show3DModel = true;
+        });
+
+        if (!_is3DModelVerified &&
+            !_isChecking3DModel) {
+          _check3DModelAvailability(
+            force: _modelLoadError.isNotEmpty,
+          );
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 64,
+        height: 64,
+        margin: const EdgeInsets.only(right: 8),
+        decoration: BoxDecoration(
+          color: _show3DModel ? const Color(0xFFEAF0FF) : Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: _show3DModel
+                ? Theme.of(context).colorScheme.primary
+                : const Color(0xFFDDE1E8),
+            width: _show3DModel ? 2 : 1,
+          ),
+        ),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.view_in_ar_rounded, size: 25),
+            SizedBox(height: 2),
+            Text(
+              '3D',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==========================================================================
   // THUMBNAIL
   // ==========================================================================
 
@@ -1409,6 +1895,12 @@ class _ProductImageGalleryState
 
     return GestureDetector(
       onTap: () {
+        if (_show3DModel) {
+          setState(() {
+            _show3DModel = false;
+          });
+        }
+
         _pageController
             .animateToPage(
           index,
@@ -1496,6 +1988,7 @@ class _ProductImageGalleryState
     // NO INITIAL IMAGE + API still loading
     // ------------------------------------------------------------------------
     if (_imageUrls.isEmpty &&
+        _modelUrl.isEmpty &&
         _isLoadingApiImages) {
       return SizedBox(
         width: widget.width,
@@ -1526,7 +2019,7 @@ class _ProductImageGalleryState
     // ------------------------------------------------------------------------
     // NO IMAGE
     // ------------------------------------------------------------------------
-    if (_imageUrls.isEmpty) {
+    if (_imageUrls.isEmpty && _modelUrl.isEmpty) {
       return SizedBox(
         width: widget.width,
         height: widget.height,
@@ -1544,8 +2037,9 @@ class _ProductImageGalleryState
             child: Stack(
               children: [
                 Positioned.fill(
-                  child:
-                  PageView.builder(
+                  child: _show3DModel && _modelUrl.isNotEmpty
+                      ? _build3DModelViewer()
+                      : PageView.builder(
                     controller:
                     _pageController,
                     itemCount:
@@ -1553,6 +2047,7 @@ class _ProductImageGalleryState
                     onPageChanged:
                         (index) {
                       setState(() {
+                        _show3DModel = false;
                         _currentIndex =
                             index;
                       });
@@ -1571,8 +2066,8 @@ class _ProductImageGalleryState
                 // ------------------------------------------------------------
                 // IMAGE COUNTER
                 // ------------------------------------------------------------
-                if (_imageUrls.length >
-                    1)
+                if (!_show3DModel &&
+                    _imageUrls.length > 1)
                   Positioned(
                     top: 12,
                     right: 12,
@@ -1610,6 +2105,44 @@ class _ProductImageGalleryState
                           FontWeight
                               .w700,
                         ),
+                      ),
+                    ),
+                  ),
+
+                // ------------------------------------------------------------
+                // 3D MODEL BADGE
+                // ------------------------------------------------------------
+                if (_show3DModel && _modelUrl.isNotEmpty)
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.58),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.view_in_ar_rounded,
+                            size: 15,
+                            color: Colors.white,
+                          ),
+                          SizedBox(width: 5),
+                          Text(
+                            '3D Model',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -1679,30 +2212,31 @@ class _ProductImageGalleryState
                 // ------------------------------------------------------------
                 // ZOOM ICON
                 // ------------------------------------------------------------
-                Positioned(
-                  bottom: 10,
-                  right: 10,
-                  child: Container(
-                    padding:
-                    const EdgeInsets
-                        .all(7),
-                    decoration:
-                    BoxDecoration(
-                      color: Colors.black
-                          .withOpacity(
-                        0.45,
+                if (!_show3DModel)
+                  Positioned(
+                    bottom: 10,
+                    right: 10,
+                    child: Container(
+                      padding:
+                      const EdgeInsets
+                          .all(7),
+                      decoration:
+                      BoxDecoration(
+                        color: Colors.black
+                            .withOpacity(
+                          0.45,
+                        ),
+                        shape:
+                        BoxShape.circle,
                       ),
-                      shape:
-                      BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.zoom_in_rounded,
-                      size: 18,
-                      color:
-                      Colors.white,
+                      child: const Icon(
+                        Icons.zoom_in_rounded,
+                        size: 18,
+                        color:
+                        Colors.white,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ),
@@ -1710,7 +2244,7 @@ class _ProductImageGalleryState
           // ======================================================
           // THUMBNAILS
           // ======================================================
-          if (_imageUrls.length > 1)
+          if (_imageUrls.length > 1 || _modelUrl.isNotEmpty)
             Container(
               height: 82,
               width: double.infinity,
@@ -1733,21 +2267,19 @@ class _ProductImageGalleryState
                   ),
                 ),
               ),
-              child:
-              ListView.builder(
-                scrollDirection:
-                Axis.horizontal,
-                itemCount:
-                _imageUrls.length,
-                itemBuilder: (
-                    context,
-                    index,
-                    ) {
-                  return _buildThumbnail(
-                    _imageUrls[index],
-                    index,
-                  );
-                },
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  ...List.generate(
+                    _imageUrls.length,
+                        (index) => _buildThumbnail(
+                      _imageUrls[index],
+                      index,
+                    ),
+                  ),
+                  if (_modelUrl.isNotEmpty)
+                    _build3DThumbnail(),
+                ],
               ),
             ),
         ],
@@ -2032,3 +2564,4 @@ class _InfoRow extends StatelessWidget {
     );
   }
 }
+

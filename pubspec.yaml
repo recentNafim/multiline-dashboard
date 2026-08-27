@@ -28,6 +28,7 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  model_viewer_plus: ^1.9.3
   get: ^4.7.3
   http: ^1.6.0
   pdf: ^3.11.3
