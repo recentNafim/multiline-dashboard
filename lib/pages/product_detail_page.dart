@@ -24,12 +24,14 @@ class ProductDetailPage extends StatelessWidget {
     final cartController = Get.find<CartController>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F8FC),
+      backgroundColor: const Color(0xFFF5F7FB),
       appBar: AppBar(
+        toolbarHeight: 68,
         title: const Text(
           'Product Details',
           style: TextStyle(
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.2,
           ),
         ),
         actions: const [
@@ -64,9 +66,10 @@ class ProductDetailPage extends StatelessWidget {
       BuildContext context,
       CartController cartController,
       ) {
-    return SizedBox(
+    return Container(
       width: double.infinity,
       height: double.infinity,
+      padding: const EdgeInsets.all(24),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -76,8 +79,19 @@ class ProductDetailPage extends StatelessWidget {
           Expanded(
             flex: 5,
             child: Container(
-              color: Colors.white,
-              padding: const EdgeInsets.all(30),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: const Color(0xFFE6EAF0)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x120F172A),
+                    blurRadius: 30,
+                    offset: Offset(0, 12),
+                  ),
+                ],
+              ),
               child: Container(
                 width: double.infinity,
                 height: double.infinity,
@@ -100,15 +114,30 @@ class ProductDetailPage extends StatelessWidget {
           // ===================================================
           // RIGHT DETAILS
           // ===================================================
+          const SizedBox(width: 24),
           Expanded(
             flex: 6,
-            child: SingleChildScrollView(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: const Color(0xFFE6EAF0)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0D0F172A),
+                    blurRadius: 24,
+                    offset: Offset(0, 10),
+                  ),
+                ],
+              ),
+              child: SingleChildScrollView(
               padding: const EdgeInsets.all(32),
               child: _buildDetails(
                 context,
                 cartController,
                 isDesktop: true,
               ),
+            ),
             ),
           ),
         ],
@@ -149,6 +178,14 @@ class ProductDetailPage extends StatelessWidget {
             decoration: BoxDecoration(
               color: const Color(0xFFF1F3F7),
               borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: const Color(0xFFE5E9F0)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x120F172A),
+                  blurRadius: 24,
+                  offset: Offset(0, 10),
+                ),
+              ],
             ),
             clipBehavior: Clip.antiAlias,
             child: _ProductImageGallery(
@@ -259,7 +296,7 @@ class ProductDetailPage extends StatelessWidget {
         // ADD TO CART
         // =====================================================
         SizedBox(
-          height: 42,
+          height: 50,
           child: FilledButton.icon(
             onPressed: () {
               cartController.addToCart(product);
@@ -269,7 +306,7 @@ class ProductDetailPage extends StatelessWidget {
                 horizontal: 18,
               ),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
               ),
               elevation: 0,
             ),
@@ -321,10 +358,17 @@ class ProductDetailPage extends StatelessWidget {
           ),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
               color: const Color(0xFFE8EBF0),
             ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0A0F172A),
+                blurRadius: 18,
+                offset: Offset(0, 7),
+              ),
+            ],
           ),
           child: Column(
             children: [

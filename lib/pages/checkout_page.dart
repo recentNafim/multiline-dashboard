@@ -11,20 +11,35 @@ class CheckoutPage extends GetView<CartController> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: 68,
         title: const Text(
           'Checkout',
-          style: TextStyle(fontWeight: FontWeight.w700),
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.2,
+          ),
         ),
       ),
       body: Obx(
-        () => ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
+        () => Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 120),
+              children: [
             Container(
               padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFFE5E7EB)),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0D0F172A),
+                    blurRadius: 18,
+                    offset: Offset(0, 8),
+                  ),
+                ],
               ),
               child: Row(
                 children: [
@@ -70,7 +85,9 @@ class CheckoutPage extends GetView<CartController> {
                 ],
               ),
             ),
-          ],
+              ],
+            ),
+          ),
         ),
       ),
       bottomNavigationBar: Obx(

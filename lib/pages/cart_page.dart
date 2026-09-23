@@ -24,11 +24,27 @@ class CartPage extends GetView<CartController> {
       // APP BAR
       // ==============================================================
       appBar: AppBar(
-        title: const Text(
-          'My Cart',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-          ),
+        toolbarHeight: 68,
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'My Cart',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.2,
+              ),
+            ),
+            SizedBox(height: 2),
+            Text(
+              'Review selected products',
+              style: TextStyle(
+                fontSize: 12,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
         ),
       ),
 
@@ -84,9 +100,16 @@ class CartPage extends GetView<CartController> {
               color: Colors.white,
               border: Border(
                 top: BorderSide(
-                  color: Color(0xFFEEF0F4),
+                  color: Color(0xFFE5E7EB),
                 ),
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Color(0x120F172A),
+                  blurRadius: 22,
+                  offset: Offset(0, -8),
+                ),
+              ],
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -95,7 +118,7 @@ class CartPage extends GetView<CartController> {
                 // PRESENTATION BUTTON
                 // ====================================================
                 SizedBox(
-                  height: 42,
+                  height: 46,
                   child: OutlinedButton.icon(
                     onPressed: _makePresentation,
                     icon: const Icon(
@@ -126,7 +149,7 @@ class CartPage extends GetView<CartController> {
                 // PDF BUTTON
                 // ====================================================
                 SizedBox(
-                  height: 42,
+                  height: 46,
                   child: FilledButton.icon(
                     onPressed: _makePdf,
                     icon: const Icon(

@@ -670,7 +670,7 @@ class _DashboardPageState extends State<DashboardPage> {
     if (imageUrl.trim().isEmpty) {
       return Container(
         width: double.infinity,
-        height: 155,
+        height: 172,
         color: const Color(0xFFF4F6F8),
         child: const Center(
           child: Column(
@@ -698,7 +698,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return SizedBox(
       width: double.infinity,
-      height: 155,
+      height: 172,
       child: Image.network(
         imageUrl,
         fit: BoxFit.cover,
@@ -1136,20 +1136,28 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return Container(
       width: double.infinity,
-      padding:
-      const EdgeInsets.fromLTRB(
-        16,
-        14,
-        16,
-        10,
-      ),
-      decoration: const BoxDecoration(
-        color: Color(0xFFF7F8FA),
-        border: Border(
-          bottom: BorderSide(
-            color: Color(0xFFE8EAEE),
-          ),
+      margin: const EdgeInsets.fromLTRB(16, 14, 16, 2),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFFFFFFF),
+            Color(0xFFF7FAFF),
+          ],
         ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0xFFE4E9F2),
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0F0F172A),
+            blurRadius: 24,
+            offset: Offset(0, 8),
+          ),
+        ],
       ),
       child: LayoutBuilder(
         builder: (
@@ -1265,22 +1273,25 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
 
       appBar: AppBar(
+        toolbarHeight: 72,
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Products',
+              'Display Room',
               style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                fontSize: 21,
+                letterSpacing: -0.3,
               ),
             ),
+            SizedBox(height: 2),
             Text(
-              'Available display room products',
+              'Explore available products and collections',
               style: TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w400,
-                color: Color(0xFF7A8190),
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF64748B),
               ),
             ),
           ],
@@ -1413,7 +1424,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     }
 
                     return GridView.builder(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
                       physics:
                       const AlwaysScrollableScrollPhysics(),
                       gridDelegate:
@@ -1421,7 +1432,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         crossAxisCount: crossAxisCount,
                         crossAxisSpacing: 16,
                         mainAxisSpacing: 16,
-                        mainAxisExtent: 410,
+                        mainAxisExtent: 432,
                       ),
                       itemCount: products.length,
                       itemBuilder: (
@@ -1488,18 +1499,19 @@ class _DashboardPageState extends State<DashboardPage> {
         ? organizationCode
         : organizationId;
 
-    return Card(
+    return _HoverLift(
+      child: Card(
       elevation: 0,
       margin: EdgeInsets.zero,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         side: const BorderSide(
           color: Color(0xFFE3E6EC),
         ),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         onTap: () {
           _openDetailPage(item);
         },
@@ -1511,8 +1523,8 @@ class _DashboardPageState extends State<DashboardPage> {
             // ========================================================
             ClipRRect(
               borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(18),
-                topRight: Radius.circular(18),
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
               ),
               child: _buildProductImage(
                 imageUrl,
@@ -1778,6 +1790,7 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -2307,6 +2320,48 @@ class _DashboardPageState extends State<DashboardPage> {
 // ==================================================================
 // ERROR VIEW
 // ==================================================================
+
+
+class _HoverLift extends StatefulWidget {
+  final Widget child;
+
+  const _HoverLift({required this.child});
+
+  @override
+  State<_HoverLift> createState() => _HoverLiftState();
+}
+
+class _HoverLiftState extends State<_HoverLift> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        transform: Matrix4.translationValues(0, _hovered ? -5 : 0, 0),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: _hovered
+                  ? const Color(0x1F0F172A)
+                  : const Color(0x0D0F172A),
+              blurRadius: _hovered ? 28 : 14,
+              offset: Offset(0, _hovered ? 12 : 6),
+            ),
+          ],
+        ),
+        child: widget.child,
+      ),
+    );
+  }
+}
+
 class _ErrorView extends StatelessWidget {
   final String message;
   final Future<void> Function() onRetry;

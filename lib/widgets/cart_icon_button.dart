@@ -15,23 +15,37 @@ class CartIconButton extends StatelessWidget {
       () => Stack(
         clipBehavior: Clip.none,
         children: [
-          IconButton(
-            onPressed: () => Get.to(() => const CartPage()),
-            icon: const Icon(Icons.shopping_bag_outlined),
+          Tooltip(
+            message: 'Open cart',
+            child: IconButton.filledTonal(
+              onPressed: () => Get.to(() => const CartPage()),
+              icon: const Icon(Icons.shopping_bag_outlined),
+            ),
           ),
           if (cart.totalItems > 0)
             Positioned(
-              right: 3,
-              top: 3,
+              right: -2,
+              top: -3,
               child: Container(
                 constraints: const BoxConstraints(
-                  minWidth: 18,
-                  minHeight: 18,
+                  minWidth: 20,
+                  minHeight: 20,
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 5),
                 decoration: BoxDecoration(
-                  color: Colors.redAccent,
+                  color: const Color(0xFFEF4444),
                   borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white,
+                    width: 2,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x26000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
                 ),
                 alignment: Alignment.center,
                 child: Text(
@@ -39,7 +53,8 @@ class CartIconButton extends StatelessWidget {
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 10,
-                    fontWeight: FontWeight.w700,
+                    height: 1,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),

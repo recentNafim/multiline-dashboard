@@ -20,12 +20,49 @@ class ProductImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final child = product.hasNetworkImage
+    final Widget child = product.hasNetworkImage
         ? Image.network(
             product.fileUrl,
             height: height,
             width: width,
             fit: fit,
+            frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+              if (wasSynchronouslyLoaded) {
+                return child;
+              }
+
+              return AnimatedOpacity(
+                opacity: frame == null ? 0 : 1,
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOut,
+                child: child,
+              );
+            },
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) {
+                return child;
+              }
+
+              final int? total = progress.expectedTotalBytes;
+              final double? value = total == null
+                  ? null
+                  : progress.cumulativeBytesLoaded / total;
+
+              return Container(
+                height: height,
+                width: width,
+                color: const Color(0xFFF3F6FA),
+                alignment: Alignment.center,
+                child: SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: CircularProgressIndicator(
+                    value: value,
+                    strokeWidth: 2.4,
+                  ),
+                ),
+              );
+            },
             errorBuilder: (_, __, ___) => _placeholder(),
           )
         : _placeholder();
@@ -40,12 +77,35 @@ class ProductImage extends StatelessWidget {
     return Container(
       height: height,
       width: width,
-      color: const Color(0xFFF0F2F7),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFF8FAFC),
+            Color(0xFFEEF2F7),
+          ],
+        ),
+      ),
       alignment: Alignment.center,
-      child: const Icon(
-        Icons.inventory_2_outlined,
-        size: 48,
-        color: Color(0xFF9AA2B1),
+      child: const Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.inventory_2_outlined,
+            size: 46,
+            color: Color(0xFF94A3B8),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Image unavailable',
+            style: TextStyle(
+              color: Color(0xFF94A3B8),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
