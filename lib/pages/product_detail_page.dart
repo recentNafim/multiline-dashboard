@@ -385,7 +385,7 @@ class ProductDetailPage extends StatelessWidget {
               ),
 
               _InfoRow(
-                label: 'Available Qty',
+                label: 'MOQ',
                 value:
                 '${_prettyNumber(product.quantity)} ${product.uom}',
                 icon: Icons.inventory_2_outlined,
@@ -420,11 +420,9 @@ class ProductDetailPage extends StatelessWidget {
               ),
 
               _InfoRow(
-                label: 'Locator ID',
-                value: product.locatorId > 0
-                    ? product.locatorId.toString()
-                    : '',
-                icon: Icons.location_on_outlined,
+                label: 'Size Range',
+                 value: product.sizeRange,
+                 icon: Icons.straighten_outlined,
               ),
 
               _InfoRow(

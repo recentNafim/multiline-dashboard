@@ -113,7 +113,7 @@ class ProductCard extends StatelessWidget {
                 children: [
                   Expanded(
                     child: Text(
-                      'Available: '
+                      'MOQ: '
                           '${_prettyNumber(product.quantity)} '
                           '${product.uom}',
                       maxLines: 1,

@@ -1,5 +1,3 @@
-
-
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -24,27 +22,11 @@ class CartPage extends GetView<CartController> {
       // APP BAR
       // ==============================================================
       appBar: AppBar(
-        toolbarHeight: 68,
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'My Cart',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                letterSpacing: -0.2,
-              ),
-            ),
-            SizedBox(height: 2),
-            Text(
-              'Review selected products',
-              style: TextStyle(
-                fontSize: 12,
-                color: Color(0xFF64748B),
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
+        title: const Text(
+          'My Cart',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
 
@@ -100,16 +82,9 @@ class CartPage extends GetView<CartController> {
               color: Colors.white,
               border: Border(
                 top: BorderSide(
-                  color: Color(0xFFE5E7EB),
+                  color: Color(0xFFEEF0F4),
                 ),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Color(0x120F172A),
-                  blurRadius: 22,
-                  offset: Offset(0, -8),
-                ),
-              ],
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -118,7 +93,7 @@ class CartPage extends GetView<CartController> {
                 // PRESENTATION BUTTON
                 // ====================================================
                 SizedBox(
-                  height: 46,
+                  height: 42,
                   child: OutlinedButton.icon(
                     onPressed: _makePresentation,
                     icon: const Icon(
@@ -149,7 +124,7 @@ class CartPage extends GetView<CartController> {
                 // PDF BUTTON
                 // ====================================================
                 SizedBox(
-                  height: 46,
+                  height: 42,
                   child: FilledButton.icon(
                     onPressed: _makePdf,
                     icon: const Icon(
@@ -203,7 +178,7 @@ class CartPage extends GetView<CartController> {
 
     try {
       final List<CartItem> cartItems =
-      controller.items.values.toList();
+          controller.items.values.toList();
 
       await CartPresentationService.generate(
         items: cartItems,
@@ -263,7 +238,7 @@ class CartPage extends GetView<CartController> {
 
     try {
       final List<CartItem> cartItems =
-      controller.items.values.toList();
+          controller.items.values.toList();
 
       final pdfBytes = await CartPdfService.buildPdf(
         items: cartItems,
@@ -318,7 +293,7 @@ class CartPage extends GetView<CartController> {
         filename: '$baseFileName.pdf',
         subject: 'Display Room Product Catalogue',
         body:
-        'Please find the selected Display Room products attached.',
+            'Please find the selected Display Room products attached.',
       );
     } catch (e, stackTrace) {
       _closeLoadingDialog();
@@ -632,9 +607,9 @@ class _CartProductImage extends StatelessWidget {
   // READ IMAGE FROM MAP / JSON
   // ==================================================================
   String _readImageFromMap(
-      Map<dynamic, dynamic> data, {
-        int depth = 0,
-      }) {
+    Map<dynamic, dynamic> data, {
+    int depth = 0,
+  }) {
     if (depth > 5) {
       return '';
     }
@@ -708,9 +683,9 @@ class _CartProductImage extends StatelessWidget {
   // READ IMAGE FROM MODEL / DYNAMIC OBJECT
   // ==================================================================
   String _readImageFromObject(
-      dynamic data, {
-        int depth = 0,
-      }) {
+    dynamic data, {
+    int depth = 0,
+  }) {
     if (data == null || depth > 5) {
       return '';
     }
@@ -811,7 +786,7 @@ class _CartProductImage extends StatelessWidget {
 
   String _getImageUrl() {
     final String imageUrl =
-    _readImageFromObject(product);
+        _readImageFromObject(product);
 
     if (imageUrl.isNotEmpty) {
       debugPrint(
@@ -830,21 +805,21 @@ class _CartProductImage extends StatelessWidget {
   // FULLSCREEN IMAGE
   // ==================================================================
   void _showFullImage(
-      BuildContext context,
-      String imageUrl,
-      ) {
+    BuildContext context,
+    String imageUrl,
+  ) {
     showDialog(
       context: context,
       barrierColor:
-      Colors.black.withOpacity(0.92),
+          Colors.black.withOpacity(0.92),
       builder: (
-          BuildContext dialogContext,
-          ) {
+        BuildContext dialogContext,
+      ) {
         return Dialog(
           backgroundColor:
-          Colors.transparent,
+              Colors.transparent,
           insetPadding:
-          const EdgeInsets.all(16),
+              const EdgeInsets.all(16),
           child: Stack(
             children: [
               Positioned.fill(
@@ -856,16 +831,16 @@ class _CartProductImage extends StatelessWidget {
                       imageUrl,
                       fit: BoxFit.contain,
                       errorBuilder: (
-                          context,
-                          error,
-                          stackTrace,
-                          ) {
+                        context,
+                        error,
+                        stackTrace,
+                      ) {
                         return const Icon(
                           Icons
                               .broken_image_outlined,
                           size: 80,
                           color:
-                          Colors.white70,
+                              Colors.white70,
                         );
                       },
                     ),
@@ -878,9 +853,9 @@ class _CartProductImage extends StatelessWidget {
                 right: 8,
                 child: Material(
                   color:
-                  Colors.black54,
+                      Colors.black54,
                   shape:
-                  const CircleBorder(),
+                      const CircleBorder(),
                   child: IconButton(
                     onPressed: () {
                       Navigator.of(
@@ -905,7 +880,7 @@ class _CartProductImage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String imageUrl =
-    _getImageUrl();
+        _getImageUrl();
 
     if (imageUrl.isEmpty) {
       return Container(
@@ -916,14 +891,14 @@ class _CartProductImage extends StatelessWidget {
             0xFFF1F3F7,
           ),
           borderRadius:
-          BorderRadius.circular(
+              BorderRadius.circular(
             borderRadius,
           ),
         ),
         child: const Center(
           child: Column(
             mainAxisSize:
-            MainAxisSize.min,
+                MainAxisSize.min,
             children: [
               Icon(
                 Icons
@@ -958,7 +933,7 @@ class _CartProductImage extends StatelessWidget {
       },
       child: ClipRRect(
         borderRadius:
-        BorderRadius.circular(
+            BorderRadius.circular(
           borderRadius,
         ),
         child: Container(
@@ -973,10 +948,10 @@ class _CartProductImage extends StatelessWidget {
             height: height,
             fit: BoxFit.cover,
             loadingBuilder: (
-                context,
-                child,
-                loadingProgress,
-                ) {
+              context,
+              child,
+              loadingProgress,
+            ) {
               if (loadingProgress ==
                   null) {
                 return child;
@@ -988,21 +963,21 @@ class _CartProductImage extends StatelessWidget {
 
               return Center(
                 child:
-                CircularProgressIndicator(
+                    CircularProgressIndicator(
                   strokeWidth: 2.3,
                   value: total != null
                       ? loadingProgress
-                      .cumulativeBytesLoaded /
-                      total
+                              .cumulativeBytesLoaded /
+                          total
                       : null,
                 ),
               );
             },
             errorBuilder: (
-                context,
-                error,
-                stackTrace,
-                ) {
+              context,
+              error,
+              stackTrace,
+            ) {
               debugPrint(
                 '❌ CART IMAGE LOAD FAILED',
               );
@@ -1016,7 +991,7 @@ class _CartProductImage extends StatelessWidget {
               return const Center(
                 child: Column(
                   mainAxisSize:
-                  MainAxisSize.min,
+                      MainAxisSize.min,
                   children: [
                     Icon(
                       Icons
@@ -1064,7 +1039,7 @@ class _QtyButton extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius:
-      BorderRadius.circular(10),
+          BorderRadius.circular(10),
       child: Container(
         width: 34,
         height: 34,
@@ -1073,7 +1048,7 @@ class _QtyButton extends StatelessWidget {
             0xFFF1F3F7,
           ),
           borderRadius:
-          BorderRadius.circular(10),
+              BorderRadius.circular(10),
         ),
         alignment: Alignment.center,
         child: Icon(
@@ -1096,7 +1071,7 @@ class _EmptyCart extends StatelessWidget {
     return const Center(
       child: Column(
         mainAxisSize:
-        MainAxisSize.min,
+            MainAxisSize.min,
         children: [
           Icon(
             Icons
@@ -1113,7 +1088,7 @@ class _EmptyCart extends StatelessWidget {
             'Your cart is empty',
             style: TextStyle(
               fontWeight:
-              FontWeight.w800,
+                  FontWeight.w800,
               fontSize: 18,
             ),
           ),

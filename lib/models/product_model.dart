@@ -13,6 +13,8 @@ class ProductModel {
   final String productCategory;
   final String subInventoryCode;
   final int locatorId;
+  final String sizeRange;
+  final List<String> imageUrls;
   final String uom;
   final double quantity;
   final String materialSpecification;
@@ -36,6 +38,8 @@ class ProductModel {
     required this.productCategory,
     required this.subInventoryCode,
     required this.locatorId,
+    required this.sizeRange,
+    required this.imageUrls,
     required this.uom,
     required this.quantity,
     required this.materialSpecification,
@@ -46,7 +50,9 @@ class ProductModel {
     required this.mimeType,
   });
 
-  String get cartKey => '$masterSl-$itemCode-$locatorId';
+  String get cartKey => '$masterSl-$itemCode-${sizeRange.isEmpty ? locatorId : sizeRange}';
+
+  double get moq => quantity;
 
   bool get hasNetworkImage {
     final uri = Uri.tryParse(fileUrl);
@@ -74,8 +80,10 @@ class ProductModel {
       productCategory: _toString(detail['product_category']),
       subInventoryCode: _toString(detail['sub_inventory_code']),
       locatorId: _toInt(detail['locator_id']),
+      sizeRange: _toString(detail['size_range'] ?? detail['sizeRange']),
+      imageUrls: _extractImageUrls(detail),
       uom: _toString(detail['uom']),
-      quantity: _toDouble(detail['quantity']),
+      quantity: _toDouble(detail['moq'] ?? detail['quantity']),
       materialSpecification:
           _toString(detail['material_specification']),
       cbm: _toDouble(detail['cbm']),
@@ -84,6 +92,39 @@ class ProductModel {
       fileName: _toString(detail['file_name']),
       mimeType: _toString(detail['mime_type']),
     );
+  }
+
+  static List<String> _extractImageUrls(Map<String, dynamic> detail) {
+    final result = <String>[];
+    final seen = <String>{};
+    void add(dynamic value) {
+      if (value == null) return;
+      var url = value.toString().trim();
+      if (url.isEmpty || url.toLowerCase() == 'null') return;
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = url.replaceFirst(RegExp(r'^/+'), '');
+        if (url.startsWith('ords/')) {
+          url = 'https://e501.sihirbox.com:8071/$url';
+        } else {
+          final path = url.split('/').map(Uri.encodeComponent).join('/');
+          url = 'https://e501.sihirbox.com:8071/ords/rpro/image_service/get/$path';
+        }
+      }
+      if (seen.add(url)) result.add(url);
+    }
+    final images = detail['images'];
+    if (images is List) {
+      for (final image in images) {
+        if (image is Map) {
+          add(image['image_url'] ?? image['file_url'] ?? image['file_name']);
+        } else {
+          add(image);
+        }
+      }
+    }
+    add(detail['image_url']);
+    add(detail['file_url']);
+    return result;
   }
 
   static String _toString(dynamic value) => value?.toString() ?? '';

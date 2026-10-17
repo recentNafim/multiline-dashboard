@@ -5,7 +5,6 @@ import '../services/product_service.dart';
 
 class ProductController extends GetxController {
   final ProductService _service = ProductService();
-
   final products = <ProductModel>[].obs;
   final isLoading = false.obs;
   final errorMessage = ''.obs;
@@ -20,7 +19,6 @@ class ProductController extends GetxController {
     try {
       isLoading.value = true;
       errorMessage.value = '';
-
       final result = await _service.getProducts();
       products.assignAll(result);
     } catch (e) {

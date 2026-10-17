@@ -27,10 +27,7 @@ class ProductImage extends StatelessWidget {
             width: width,
             fit: fit,
             frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-              if (wasSynchronouslyLoaded) {
-                return child;
-              }
-
+              if (wasSynchronouslyLoaded) return child;
               return AnimatedOpacity(
                 opacity: frame == null ? 0 : 1,
                 duration: const Duration(milliseconds: 250),
@@ -39,15 +36,11 @@ class ProductImage extends StatelessWidget {
               );
             },
             loadingBuilder: (context, child, progress) {
-              if (progress == null) {
-                return child;
-              }
-
+              if (progress == null) return child;
               final int? total = progress.expectedTotalBytes;
               final double? value = total == null
                   ? null
                   : progress.cumulativeBytesLoaded / total;
-
               return Container(
                 height: height,
                 width: width,
@@ -56,10 +49,7 @@ class ProductImage extends StatelessWidget {
                 child: SizedBox(
                   width: 30,
                   height: 30,
-                  child: CircularProgressIndicator(
-                    value: value,
-                    strokeWidth: 2.4,
-                  ),
+                  child: CircularProgressIndicator(value: value, strokeWidth: 2.4),
                 ),
               );
             },
@@ -81,30 +71,16 @@ class ProductImage extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFF8FAFC),
-            Color(0xFFEEF2F7),
-          ],
+          colors: [Color(0xFFF8FAFC), Color(0xFFEEF2F7)],
         ),
       ),
       alignment: Alignment.center,
       child: const Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            Icons.inventory_2_outlined,
-            size: 46,
-            color: Color(0xFF94A3B8),
-          ),
+          Icon(Icons.inventory_2_outlined, size: 46, color: Color(0xFF94A3B8)),
           SizedBox(height: 8),
-          Text(
-            'Image unavailable',
-            style: TextStyle(
-              color: Color(0xFF94A3B8),
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          Text('Image unavailable', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.w600)),
         ],
       ),
     );

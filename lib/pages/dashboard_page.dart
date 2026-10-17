@@ -5,6 +5,9 @@ import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
 import '../controllers/product_controller.dart';
+import '../controllers/cart_controller.dart';
+import '../models/product_model.dart';
+import '../widgets/product_image_carousel.dart';
 import '../widgets/cart_icon_button.dart';
 import 'product_detail_page.dart';
 
@@ -1432,7 +1435,9 @@ class _DashboardPageState extends State<DashboardPage> {
                         crossAxisCount: crossAxisCount,
                         crossAxisSpacing: 16,
                         mainAxisSpacing: 16,
-                        mainAxisExtent: 432,
+                        // Extra space for MOQ, Size Range and the quick cart action.
+                        // Keeps the product card from overflowing on narrower grids.
+                        mainAxisExtent: 482,
                       ),
                       itemCount: products.length,
                       itemBuilder: (
@@ -1526,9 +1531,9 @@ class _DashboardPageState extends State<DashboardPage> {
                 topLeft: Radius.circular(20),
                 topRight: Radius.circular(20),
               ),
-              child: _buildProductImage(
-                imageUrl,
-              ),
+              child: item is ProductModel && item.imageUrls.isNotEmpty
+                   ? ProductImageCarousel(urls: item.imageUrls)
+                   : _buildProductImage(imageUrl),
             ),
 
             // ========================================================
@@ -1724,8 +1729,32 @@ class _DashboardPageState extends State<DashboardPage> {
 
                     const Spacer(),
 
-                    // ==================================================
-                    // FOOTER
+                     if (item is ProductModel)
+                       Padding(
+                         padding: const EdgeInsets.only(bottom: 7),
+                         child: Row(
+                           children: [
+                             Expanded(
+                               child: Text(
+                                 'MOQ: ${item.moq.toStringAsFixed(item.moq == item.moq.roundToDouble() ? 0 : 2)}',
+                                 style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                 overflow: TextOverflow.ellipsis,
+                               ),
+                             ),
+                             Expanded(
+                               child: Text(
+                                 'Size: ${item.sizeRange.isEmpty ? '-' : item.sizeRange}',
+                                 style: const TextStyle(fontSize: 11),
+                                 overflow: TextOverflow.ellipsis,
+                                 textAlign: TextAlign.end,
+                               ),
+                             ),
+                           ],
+                         ),
+                       ),
+
+                     // ==================================================
+                     // FOOTER
                     // ==================================================
                     Row(
                       children: [
@@ -1760,8 +1789,16 @@ class _DashboardPageState extends State<DashboardPage> {
 
                         const Spacer(),
 
-                        Text(
-                          'View Details',
+                         if (item is ProductModel)
+                           IconButton.filledTonal(
+                             tooltip: 'Add to Cart',
+                             icon: const Icon(Icons.add_shopping_cart_outlined, size: 17),
+                             onPressed: () => Get.find<CartController>().addToCart(item),
+                           ),
+                         const SizedBox(width: 4),
+
+                         Text(
+                           'View Details',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight:

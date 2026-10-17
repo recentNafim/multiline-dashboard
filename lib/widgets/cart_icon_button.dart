@@ -10,7 +10,6 @@ class CartIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cart = Get.find<CartController>();
-
     return Obx(
       () => Stack(
         clipBehavior: Clip.none,
@@ -27,18 +26,12 @@ class CartIconButton extends StatelessWidget {
               right: -2,
               top: -3,
               child: Container(
-                constraints: const BoxConstraints(
-                  minWidth: 20,
-                  minHeight: 20,
-                ),
+                constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
                 padding: const EdgeInsets.symmetric(horizontal: 5),
                 decoration: BoxDecoration(
                   color: const Color(0xFFEF4444),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: Colors.white,
-                    width: 2,
-                  ),
+                  border: Border.all(color: Colors.white, width: 2),
                   boxShadow: const [
                     BoxShadow(
                       color: Color(0x26000000),
