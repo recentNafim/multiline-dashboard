@@ -80,7 +80,7 @@ class ProductModel {
       productCategory: _toString(detail['product_category']),
       subInventoryCode: _toString(detail['sub_inventory_code']),
       locatorId: _toInt(detail['locator_id']),
-      sizeRange: _toString(detail['size_range'] ?? detail['sizeRange']),
+      sizeRange: readSizeRange(detail, master: master),
       imageUrls: _extractImageUrls(detail),
       uom: _toString(detail['uom']),
       quantity: _toDouble(detail['moq'] ?? detail['quantity']),
@@ -92,6 +92,44 @@ class ProductModel {
       fileName: _toString(detail['file_name']),
       mimeType: _toString(detail['mime_type']),
     );
+  }
+
+  /// Read Size Range from the same Oracle detail used by the report.
+  /// ORDS can return snake_case, uppercase, or camelCase JSON keys.
+  /// Never substitute locator_id: it is not a shoe/clothing size range.
+  static String readSizeRange(
+    Map<String, dynamic> detail, {
+    Map<String, dynamic>? master,
+  }) {
+    String fromMap(Map<String, dynamic> source) {
+      String lower = '';
+      String upper = '';
+      for (final entry in source.entries) {
+        final normalizedKey = entry.key
+            .toLowerCase()
+            .replaceAll(RegExp(r'[^a-z0-9]'), '');
+        final value = entry.value?.toString().trim() ?? '';
+        if (value.isEmpty || value.toLowerCase() == 'null') continue;
+        if (normalizedKey == 'sizerange') return value;
+        if (normalizedKey == 'lowersize' ||
+            normalizedKey == 'sizelower' ||
+            normalizedKey == 'minsize') {
+          lower = value;
+        }
+        if (normalizedKey == 'uppersize' ||
+            normalizedKey == 'sizeupper' ||
+            normalizedKey == 'maxsize') {
+          upper = value;
+        }
+      }
+      if (lower.isNotEmpty && upper.isNotEmpty) return '$lower-$upper';
+      return '';
+    }
+
+    final detailValue = fromMap(detail);
+    if (detailValue.isNotEmpty) return detailValue;
+    if (master != null) return fromMap(master);
+    return '';
   }
 
   static List<String> _extractImageUrls(Map<String, dynamic> detail) {

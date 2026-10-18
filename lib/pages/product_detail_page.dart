@@ -11,13 +11,28 @@ import '../controllers/cart_controller.dart';
 import '../models/product_model.dart';
 import '../widgets/cart_icon_button.dart';
 
-class ProductDetailPage extends StatelessWidget {
+class ProductDetailPage extends StatefulWidget {
   final ProductModel product;
 
   const ProductDetailPage({
     super.key,
     required this.product,
   });
+
+  @override
+  State<ProductDetailPage> createState() => _ProductDetailPageState();
+}
+
+class _ProductDetailPageState extends State<ProductDetailPage> {
+  ProductModel get product => widget.product;
+
+  late String _sizeRange = product.sizeRange.trim();
+
+  void _onSizeRangeLoaded(String value) {
+    final updated = value.trim();
+    if (!mounted || updated.isEmpty || updated == _sizeRange) return;
+    setState(() => _sizeRange = updated);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -102,6 +117,7 @@ class ProductDetailPage extends StatelessWidget {
                 clipBehavior: Clip.antiAlias,
                 child: _ProductImageGallery(
                   product: product,
+                  onSizeRangeLoaded: _onSizeRangeLoaded,
                   width: double.infinity,
                   height: double.infinity,
                   fit: BoxFit.contain,
@@ -190,6 +206,7 @@ class ProductDetailPage extends StatelessWidget {
             clipBehavior: Clip.antiAlias,
             child: _ProductImageGallery(
               product: product,
+              onSizeRangeLoaded: _onSizeRangeLoaded,
               width: double.infinity,
               height: imageHeight,
               fit: BoxFit.contain,
@@ -419,10 +436,12 @@ class ProductDetailPage extends StatelessWidget {
                 icon: Icons.warehouse_outlined,
               ),
 
+              // Keep the row visible while the detail API is loading or
+              // if an old database row does not contain SIZE_RANGE yet.
               _InfoRow(
                 label: 'Size Range',
-                 value: product.sizeRange,
-                 icon: Icons.straighten_outlined,
+                value: _sizeRange.isNotEmpty ? _sizeRange : 'Not provided',
+                icon: Icons.straighten_outlined,
               ),
 
               _InfoRow(
@@ -463,6 +482,7 @@ class ProductDetailPage extends StatelessWidget {
 
 class _ProductImageGallery extends StatefulWidget {
   final ProductModel product;
+  final ValueChanged<String>? onSizeRangeLoaded;
   final double width;
   final double height;
   final BoxFit fit;
@@ -470,6 +490,7 @@ class _ProductImageGallery extends StatefulWidget {
 
   const _ProductImageGallery({
     required this.product,
+    this.onSizeRangeLoaded,
     required this.width,
     required this.height,
     required this.fit,
@@ -1153,6 +1174,16 @@ class _ProductImageGalleryState
         return;
       }
 
+      // Reuse this GET response for the Product Information panel.
+      // Older dashboard list responses may omit size_range even when
+      // the selected detail response includes it.
+      final String fetchedSizeRange = ProductModel.readSizeRange(
+        selectedDetail,
+      );
+      if (mounted && fetchedSizeRange.isNotEmpty) {
+        widget.onSizeRangeLoaded?.call(fetchedSizeRange);
+      }
+
       debugPrint(
         'MATCHED DETAIL SL => '
             '${selectedDetail['sl']}',
@@ -1371,6 +1402,13 @@ class _ProductImageGalleryState
           '_master_sl',
               () => masterSl,
         );
+
+        final String sizeRangeFromMaster =
+            ProductModel.readSizeRange(master);
+        if (ProductModel.readSizeRange(detail).isEmpty &&
+            sizeRangeFromMaster.isNotEmpty) {
+          detail['size_range'] = sizeRangeFromMaster;
+        }
 
         result.add(detail);
       }
