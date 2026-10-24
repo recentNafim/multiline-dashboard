@@ -83,7 +83,7 @@ class ProductModel {
       sizeRange: readSizeRange(detail, master: master),
       imageUrls: _extractImageUrls(detail),
       uom: _toString(detail['uom']),
-      quantity: _toDouble(detail['moq'] ?? detail['quantity']),
+      quantity: readMoq(detail, master: master) ?? 0,
       materialSpecification:
           _toString(detail['material_specification']),
       cbm: _toDouble(detail['cbm']),
@@ -110,7 +110,7 @@ class ProductModel {
             .replaceAll(RegExp(r'[^a-z0-9]'), '');
         final value = entry.value?.toString().trim() ?? '';
         if (value.isEmpty || value.toLowerCase() == 'null') continue;
-        if (normalizedKey == 'sizerange') return value;
+        if (const {'sizerange', 'sizewise', 'sizewiserange'}.contains(normalizedKey)) return value;
         if (normalizedKey == 'lowersize' ||
             normalizedKey == 'sizelower' ||
             normalizedKey == 'minsize') {
@@ -130,6 +130,33 @@ class ProductModel {
     if (detailValue.isNotEmpty) return detailValue;
     if (master != null) return fromMap(master);
     return '';
+  }
+
+
+  /// MOQ is an ordering threshold, not the available stock quantity.
+  /// Read explicit MOQ aliases first; `quantity` remains a last-resort
+  /// compatibility fallback for old ORDS payloads.
+  static double? readMoq(
+    Map<String, dynamic> detail, {
+    Map<String, dynamic>? master,
+  }) {
+    double? search(Map<String, dynamic> source) {
+      for (final entry in source.entries) {
+        final key = entry.key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+        if (const {'moq', 'minimumorderquantity', 'minimumqty', 'minimumquantity'}
+            .contains(key)) {
+          final value = double.tryParse(entry.value?.toString().trim() ?? '');
+          if (value != null) return value;
+        }
+      }
+      return null;
+    }
+
+    final explicit = search(detail) ?? (master == null ? null : search(master));
+    if (explicit != null) return explicit;
+    // Legacy backend used `quantity` to represent MOQ.
+    final legacy = detail['quantity'] ?? detail['QUANTITY'];
+    return legacy == null ? null : double.tryParse(legacy.toString());
   }
 
   static List<String> _extractImageUrls(Map<String, dynamic> detail) {
@@ -154,7 +181,7 @@ class ProductModel {
     if (images is List) {
       for (final image in images) {
         if (image is Map) {
-          add(image['image_url'] ?? image['file_url'] ?? image['file_name']);
+          add(image['original_url'] ?? image['full_image_url'] ?? image['high_res_url'] ?? image['image_url'] ?? image['file_url'] ?? image['file_name']);
         } else {
           add(image);
         }

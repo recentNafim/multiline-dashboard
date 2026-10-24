@@ -20,12 +20,23 @@ class ProductImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Widget child = product.hasNetworkImage
+    // Prefer images[].original_url/full_image_url from the Oracle response.
+    // file_url is often a small thumbnail and should only be a fallback.
+    final String bestUrl = product.imageUrls.isNotEmpty
+        ? product.imageUrls.first
+        : product.fileUrl;
+    final Uri? bestUri = Uri.tryParse(bestUrl);
+    final bool hasBestUrl = bestUri != null &&
+        (bestUri.scheme == 'https' || bestUri.scheme == 'http') &&
+        bestUri.host.isNotEmpty;
+
+    final Widget child = hasBestUrl
         ? Image.network(
-            product.fileUrl,
+            bestUrl,
             height: height,
             width: width,
             fit: fit,
+            filterQuality: FilterQuality.high,
             frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
               if (wasSynchronouslyLoaded) return child;
               return AnimatedOpacity(
@@ -53,7 +64,21 @@ class ProductImage extends StatelessWidget {
                 ),
               );
             },
-            errorBuilder: (_, __, ___) => _placeholder(),
+            errorBuilder: (_, __, ___) {
+              // If the full-size URL is unavailable, fall back to the
+              // original legacy file_url without breaking product cards.
+              if (bestUrl != product.fileUrl && product.hasNetworkImage) {
+                return Image.network(
+                  product.fileUrl,
+                  width: width,
+                  height: height,
+                  fit: fit,
+                  filterQuality: FilterQuality.high,
+                  errorBuilder: (_, __, ___) => _placeholder(),
+                );
+              }
+              return _placeholder();
+            },
           )
         : _placeholder();
 
