@@ -305,7 +305,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
             const SizedBox(width: 7),
             Expanded(
               child: Text(
-                'Item Code: ${product.itemCode}',
+                product.itemCode.trim().isEmpty
+                    ? 'Item Code: Not assigned'
+                    : 'Item Code: ${product.itemCode}',
                 style: const TextStyle(
                   fontSize: 14,
                   color: Color(0xFF757D8C),
@@ -425,7 +427,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               _InfoRow(
                 label: 'Weight',
                 value: product.weight > 0
-                    ? '${_prettyNumber(product.weight)} kg'
+                    ? '${_prettyNumber(product.weight)} g'
                     : '',
                 icon: Icons.monitor_weight_outlined,
               ),
@@ -1070,10 +1072,11 @@ class _ProductImageGalleryState
     widget.product.itemCode
         .trim();
 
-    if (itemCode.isEmpty) {
-      debugPrint(
-        'IMAGE API SKIPPED => itemCode empty',
-      );
+    // Item Code is optional. For no-code products, load the product's
+    // master record instead of skipping the image / MOQ / Size Range API.
+    final int? masterId = _productMasterSl();
+    if (itemCode.isEmpty && masterId == null) {
+      debugPrint('IMAGE API SKIPPED => no itemCode or masterSl');
       return;
     }
 
@@ -1087,7 +1090,7 @@ class _ProductImageGalleryState
 
       final Map<String, String>
       queryParameters = {
-        'p_item_code': itemCode,
+        if (itemCode.isNotEmpty) 'p_item_code': itemCode,
         'p_limit': '100',
       };
 
@@ -1518,10 +1521,9 @@ class _ProductImageGalleryState
                 .trim() ??
                 '';
 
-        if (rowMasterSl ==
-            masterSl &&
-            rowItemCode ==
-                itemCode) {
+        if (itemCode.isNotEmpty &&
+            rowMasterSl == masterSl &&
+            rowItemCode == itemCode) {
           return detail;
         }
       }
@@ -1550,17 +1552,18 @@ class _ProductImageGalleryState
     // ------------------------------------------------------------------------
     // 4. ITEM CODE fallback
     // ------------------------------------------------------------------------
-    for (final detail in details) {
-      final String rowItemCode =
-          detail['item_code']
-              ?.toString()
-              .trim() ??
-              '';
-
-      if (rowItemCode ==
-          itemCode) {
-        return detail;
+    if (itemCode.isNotEmpty) {
+      for (final detail in details) {
+        final String rowItemCode =
+            detail['item_code']?.toString().trim() ?? '';
+        if (rowItemCode == itemCode) return detail;
       }
+    } else if (masterSl != null) {
+      // Only fall back by master when it identifies exactly one detail.
+      // Otherwise rely on FILE_URL above, never arbitrarily pick a product.
+      final matching = details.where((detail) =>
+          _toInt(detail['m_sl'] ?? detail['_master_sl']) == masterSl).toList();
+      if (matching.length == 1) return matching.single;
     }
 
     return null;

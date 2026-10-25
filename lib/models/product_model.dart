@@ -50,7 +50,13 @@ class ProductModel {
     required this.mimeType,
   });
 
-  String get cartKey => '$masterSl-$itemCode-${sizeRange.isEmpty ? locatorId : sizeRange}';
+  // No-code products must still have independent cart entries.
+  String get cartKey {
+    final identity = itemCode.trim().isNotEmpty
+        ? itemCode
+        : (fileUrl.trim().isNotEmpty ? fileUrl : description);
+    return '$masterSl-$identity-${sizeRange.isEmpty ? locatorId : sizeRange}';
+  }
 
   double get moq => quantity;
 
