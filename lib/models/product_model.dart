@@ -19,6 +19,8 @@ class ProductModel {
   final double quantity;
   final String materialSpecification;
   final double cbm;
+  final String cbmRaw;
+  final double? fob;
   final double weight;
   final String fileUrl;
   final String fileName;
@@ -44,6 +46,8 @@ class ProductModel {
     required this.quantity,
     required this.materialSpecification,
     required this.cbm,
+    this.cbmRaw = '',
+    this.fob,
     required this.weight,
     required this.fileUrl,
     required this.fileName,
@@ -93,6 +97,8 @@ class ProductModel {
       materialSpecification:
           _toString(detail['material_specification']),
       cbm: _toDouble(detail['cbm']),
+      cbmRaw: _toString(detail['cbm']),
+      fob: _toNullableDouble(detail['fob']),
       weight: _toDouble(detail['weight']),
       fileUrl: _toString(detail['file_url']),
       fileName: _toString(detail['file_name']),
@@ -204,6 +210,12 @@ class ProductModel {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static double? _toNullableDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is num) return value.toDouble();
+    return double.tryParse(value.toString());
   }
 
   static double _toDouble(dynamic value) {
