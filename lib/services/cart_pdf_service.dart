@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -5,546 +6,628 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../models/cart_item.dart';
-import '../models/product_model.dart';
 
-/// DISPLAY ROOM | STUDIO EDITION
-/// Premium A4 client catalogue automatically built from Cart products.
-/// MOQ and selected Cart quantity are separate. Data never invented.
-/// For product images, original image bytes are downloaded as returned by ORDS.
+/// Premium Display Room lookbook.
+///
+/// Restores the original catalogue style:
+/// cover -> product selection index -> product detail + photo gallery per
+/// product -> thank-you page. This intentionally keeps the report generator
+/// separate from the Cart/Filter UI and does not change cart quantities.
 class CartPdfService {
-  static final PdfColor _dark = PdfColor.fromHex('#17242A');
-  static final PdfColor _dark2 = PdfColor.fromHex('#24343A');
-  static final PdfColor _teal = PdfColor.fromHex('#087F77');
-  static final PdfColor _coral = PdfColor.fromHex('#EF806B');
-  static final PdfColor _aqua = PdfColor.fromHex('#C7EEE6');
-  static final PdfColor _cream = PdfColor.fromHex('#FAF8F3');
-  static final PdfColor _warm = PdfColor.fromHex('#F2F0EA');
-  static final PdfColor _muted = PdfColor.fromHex('#67777B');
-  static final PdfColor _border = PdfColor.fromHex('#DEE5E2');
+  CartPdfService._();
 
-  static String _value(String? v, [String fallback = 'Not provided']) {
-    final s = (v ?? '').trim();
-    return s.isEmpty || s.toLowerCase() == 'null' ? fallback : s;
-  }
+  static final PdfColor _ink = PdfColor.fromInt(0xFF17272C);
+  static final PdfColor _ink2 = PdfColor.fromInt(0xFF23363B);
+  static final PdfColor _mint = PdfColor.fromInt(0xFFC7EFE7);
+  static final PdfColor _coral = PdfColor.fromInt(0xFFF58270);
+  static final PdfColor _muted = PdfColor.fromInt(0xFF64747A);
+  static final PdfColor _line = PdfColor.fromInt(0xFFDCE3E3);
+  static final PdfColor _paper = PdfColor.fromInt(0xFFF7F8F7);
 
-  static String _num(num v) {
-    if (v == v.roundToDouble()) return v.toInt().toString();
-    return v.toStringAsFixed(2)
-        .replaceFirst(RegExp(r'0+$'), '')
-        .replaceFirst(RegExp(r'\.$'), '');
-  }
+  static const double _pageWidth = 595.28;
+  static const double _pageHeight = 841.89;
 
-  static String _moq(ProductModel p) => p.moq > 0
-      ? '${_num(p.moq)} ${_value(p.uom, '')}'.trim()
-      : 'Not provided';
+  static Future<Uint8List> buildPdf({
+    required List<CartItem> items,
+    String imageBaseUrl = '',
+  }) async {
+    final doc = pw.Document(
+      title: 'Display Room | Premium Product Lookbook',
+      author: 'Display Room',
+      creator: 'Display Room Flutter Application',
+      compress: true,
+    );
+    if (items.isEmpty) return doc.save();
 
-  static String _fob(ProductModel p) => p.fob == null
-      ? 'Not provided'
-      : _num(p.fob!); // Never assume a currency not supplied by the API.
+    // Fetch gallery images once per unique URL. Each product is loaded in
+    // parallel; a missing or unsupported image leaves a clean placeholder.
+    final imageCache = <String, Future<pw.MemoryImage?>>{};
+    final galleries = await Future.wait(
+      items.map((item) => _loadGallery(
+            item,
+            imageBaseUrl,
+            imageCache,
+          )),
+    );
 
-  static String _cbm(ProductModel p) => p.cbmRaw.trim().isNotEmpty
-      ? p.cbmRaw.trim()
-      : (p.cbm > 0 ? _num(p.cbm) : 'Not provided');
+    final generated = DateTime.now().toLocal();
+    final dateLabel = '${_two(generated.day)}.${_two(generated.month)}.${generated.year}';
+    final totalUnits = items.fold<int>(0, (sum, row) => sum + row.quantity);
 
-  static String _today(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.${d.year}';
+    doc.addPage(_coverPage(items, galleries, totalUnits, dateLabel));
 
-  static String _imageUrl(String raw, String base) {
-    final u = raw.trim();
-    if (u.isEmpty) return '';
-    if (u.startsWith('https://') || u.startsWith('http://')) return u;
-    final parsed = Uri.tryParse(base);
-    if (u.startsWith('/ords/') && parsed != null && parsed.hasAuthority) {
-      return '${parsed.scheme}://${parsed.authority}$u';
+    // Multiple selection pages prevent overflowing A4 for a large cart.
+    const perIndexPage = 12;
+    final indexPageCount = (items.length / perIndexPage).ceil();
+    for (var index = 0; index < indexPageCount; index++) {
+      final start = index * perIndexPage;
+      final end = (start + perIndexPage < items.length)
+          ? start + perIndexPage
+          : items.length;
+      doc.addPage(_selectionPage(
+        items.sublist(start, end),
+        start,
+        index + 1,
+        indexPageCount,
+        2 + index,
+      ));
     }
-    final path = u.replaceFirst(RegExp(r'^/+'), '');
-    final encoded = path.split('/').map(Uri.encodeComponent).join('/');
-    return '${base.replaceFirst(RegExp(r'/+$'), '')}/$encoded';
+
+    for (var i = 0; i < items.length; i++) {
+      final pageNumber = 2 + indexPageCount + (i * 2);
+      doc.addPage(_productPage(
+        items[i],
+        galleries[i],
+        i,
+        items.length,
+        pageNumber,
+      ));
+      doc.addPage(_galleryPage(
+        items[i],
+        galleries[i],
+        i,
+        pageNumber + 1,
+      ));
+    }
+
+    doc.addPage(_thankYouPage(items.length, totalUnits, dateLabel));
+    return doc.save();
   }
 
-  static pw.Widget _txt(String value,
-      {double size = 10,
-      bool bold = false,
-      PdfColor? color,
-      int lines = 2,
-      pw.TextAlign? align}) =>
-      pw.Text(value,
-          maxLines: lines,
-          overflow: pw.TextOverflow.clip,
-          textAlign: align,
-          style: pw.TextStyle(
-            fontSize: size,
-            fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-            color: color ?? _dark,
-          ));
-
-  static pw.Widget _pill(String value,
-      {PdfColor? background, PdfColor? color}) =>
-      pw.Container(
-          padding: const pw.EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-          decoration: pw.BoxDecoration(
-              color: background ?? _aqua,
-              borderRadius:
-                  const pw.BorderRadius.all(pw.Radius.circular(15))),
-          child: _txt(value,
-              size: 8.1, bold: true, color: color ?? _dark, lines: 1));
-
-  static pw.Widget _section(String title) => pw.Row(children: [
-        pw.Container(width: 5, height: 18, color: _coral),
-        pw.SizedBox(width: 9),
-        _txt(title, size: 12, bold: true)
-      ]);
-
-  static pw.Widget _field(String label, String value,
-          {double width = 254, double height = 35}) =>
-      pw.Container(
-        width: width,
-        height: height,
-        padding: const pw.EdgeInsets.fromLTRB(10, 6, 10, 5),
-        decoration: pw.BoxDecoration(
-          color: PdfColors.white,
-          border: pw.Border.all(color: _border),
-          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(7)),
-        ),
-        child: pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            _txt(label.toUpperCase(), size: 6.7, color: _muted, bold: true, lines: 1),
-            pw.SizedBox(height: 3),
-            _txt(value, size: 9.6, bold: true, lines: 1),
-          ],
-        ),
-      );
-
-  static pw.Widget _stat(String label, String value,
-      {PdfColor? background, PdfColor? textColor, double width = 254}) =>
-      pw.Container(
-        width: width,
-        height: 61,
-        padding: const pw.EdgeInsets.fromLTRB(13, 10, 13, 8),
-        decoration: pw.BoxDecoration(
-          color: background ?? _aqua,
-          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(9)),
-        ),
-        child: pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            _txt(label.toUpperCase(),
-                size: 7.3, bold: true, color: textColor ?? _teal),
-            pw.SizedBox(height: 7),
-            _txt(value,
-                size: 17, bold: true, color: textColor ?? _dark, lines: 1)
-          ],
-        ),
-      );
-
-  static pw.Widget _image(pw.ImageProvider? source,
-      {double height = 187, double width = double.infinity}) =>
-      pw.Container(
-        height: height,
-        width: width,
-        alignment: pw.Alignment.center,
-        padding: const pw.EdgeInsets.all(10),
-        decoration: pw.BoxDecoration(
-          color: PdfColors.white,
-          border: pw.Border.all(color: _border),
-          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
-        ),
-        child: source == null
-            ? _txt('Product image unavailable', color: _muted, size: 10)
-            : pw.Image(source,
-                height: height - 20, fit: pw.BoxFit.contain),
-      );
-
-  static pw.Widget _foot(pw.Context ctx) => pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          _txt('DISPLAY ROOM  /  PRODUCT LOOKBOOK',
-              size: 7.1, bold: true, color: _muted),
-          _txt('${ctx.pageNumber}', size: 8, color: _teal, bold: true)
-        ],
-      );
-
-  static pw.Page _cover(List<CartItem> items, DateTime date,
-      pw.ImageProvider? hero) {
-    final units = items.fold<int>(0, (v, x) => v + x.quantity);
+  static pw.Page _coverPage(
+    List<CartItem> items,
+    List<List<pw.MemoryImage?>> galleries,
+    int totalUnits,
+    String dateLabel,
+  ) {
+    final firstImage = galleries.isNotEmpty && galleries.first.isNotEmpty
+        ? galleries.first.first
+        : null;
     return pw.Page(
       pageFormat: PdfPageFormat.a4,
       margin: pw.EdgeInsets.zero,
-      build: (context) => pw.Stack(children: [
-        pw.Container(width: 595, height: 842, color: _dark),
-        pw.Positioned(
-            left: 0,
-            top: 0,
-            child: pw.Container(height: 842, width: 9, color: _coral)),
-        pw.Positioned(
-            right: 0,
-            top: 0,
-            child: pw.Container(height: 842, width: 151, color: _dark2)),
-        pw.Positioned(
-          top: 64,
-          left: 45,
-          child: _txt('THE PRODUCT EDIT  /  AUTOMATED CATALOGUE',
-              size: 9, color: _aqua, bold: true, lines: 1),
-        ),
-        pw.Positioned(
-          top: 133,
-          left: 45,
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              _txt('DISPLAY', size: 51, color: PdfColors.white, bold: true),
-              _txt('ROOM', size: 51, color: PdfColors.white, bold: true),
-              pw.SizedBox(height: 15),
-              _txt('Premium Product Lookbook',
-                  size: 17, color: _aqua, bold: true),
-              pw.SizedBox(height: 11),
-              pw.SizedBox(
-                width: 435,
-                child: _txt(
-                  'A curated catalogue of your selected products, photographs and available specifications.',
-                  size: 11, color: PdfColors.white, lines: 3),
-              ),
-            ],
+      build: (_) => pw.SizedBox(
+        width: _pageWidth,
+        height: _pageHeight,
+        child: pw.Stack(
+        children: [
+          pw.Positioned(
+            left: 0, top: 0,
+            child: pw.SizedBox(width: _pageWidth, height: _pageHeight,
+                child: pw.Container(color: _ink)),
           ),
-        ),
-        pw.Positioned(
-          top: 391,
-          left: 45,
-          child: pw.Row(children: [
-            _pill('${items.length} PRODUCTS',
-                background: _aqua, color: _dark),
-            pw.SizedBox(width: 11),
-            _pill('$units SELECTED UNITS',
-                background: _coral, color: PdfColors.white),
-          ]),
-        ),
-        pw.Positioned(
-          top: 469,
-          left: 45,
-          child: pw.Container(
-            width: 502,
-            height: 282,
-            padding: const pw.EdgeInsets.all(15),
-            color: PdfColors.white,
-            alignment: pw.Alignment.center,
-            child: hero == null
-                ? _txt('PRODUCT SELECTION', size: 24, color: _muted)
-                : pw.Image(hero, fit: pw.BoxFit.contain, height: 252),
+          pw.Positioned(
+            right: 0, top: 0,
+            child: pw.SizedBox(width: 116, height: _pageHeight,
+                child: pw.Container(color: _ink2)),
           ),
+          pw.Positioned(
+            right: 0, top: 0,
+            child: pw.SizedBox(width: 10, height: _pageHeight,
+                child: pw.Container(color: _coral)),
+          ),
+          pw.Positioned(
+            left: 44, top: 64,
+            child: _text('THE PRODUCT EDIT / AUTOMATED CATALOGUE',
+                9, PdfColors.white, bold: true),
+          ),
+          pw.Positioned(
+            left: 44, top: 147,
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                _text('DISPLAY', 58, PdfColors.white, bold: true),
+                _text('ROOM', 58, PdfColors.white, bold: true),
+                pw.SizedBox(height: 15),
+                _text('Premium Product Lookbook', 20, _mint, bold: true),
+                pw.SizedBox(height: 9),
+                pw.SizedBox(
+                  width: 420,
+                  child: _text(
+                      'A curated catalogue of your selected products, '
+                      'photographs and available specifications.',
+                      11, PdfColors.white),
+                ),
+              ],
+            ),
+          ),
+          pw.Positioned(
+            left: 44, top: 425,
+            child: pw.Row(children: [
+              _pill('${items.length} PRODUCTS', _mint, _ink),
+              pw.SizedBox(width: 10),
+              _pill('$totalUnits SELECTED UNITS', _coral, PdfColors.white),
+            ]),
+          ),
+          pw.Positioned(
+            left: 44, top: 493,
+            child: pw.SizedBox(width: 502, height: 270,
+                child: pw.Container(
+                  padding: const pw.EdgeInsets.all(12),
+                  color: PdfColors.white,
+                  child: _photo(firstImage, 476, 246),
+                )),
+          ),
+          pw.Positioned(
+            left: 44, top: 798,
+            child: _text('GENERATED $dateLabel', 9, PdfColors.white,
+                bold: true),
+          ),
+        ],
         ),
-        pw.Positioned(
-          bottom: 39,
-          left: 45,
-          child: _txt('GENERATED ${_today(date)}',
-              color: PdfColors.white, size: 9, bold: true),
-        ),
-      ]),
+      ),
     );
   }
 
-  static pw.Page _overview(List<CartItem> items, int offset, int pageCount) {
+  static pw.Page _selectionPage(
+    List<CartItem> rows,
+    int offset,
+    int index,
+    int indexCount,
+    int pageNumber,
+  ) {
     return pw.Page(
       pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.fromLTRB(36, 36, 36, 32),
-      build: (ctx) => pw.Column(
+      margin: const pw.EdgeInsets.fromLTRB(24, 30, 24, 24),
+      build: (_) => pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          _pill('CURATED SELECTION'),
-          pw.SizedBox(height: 14),
-          _txt('Products at a glance', size: 25, bold: true),
-          pw.SizedBox(height: 7),
-          _txt('MOQ = minimum order quantity  |  Qty = selected cart quantity',
-              size: 9, color: _muted),
+          _pill('CURATED SELECTION', _mint, _ink),
           pw.SizedBox(height: 20),
-          pw.Table(
-            columnWidths: {
-              0: const pw.FlexColumnWidth(.35),
-              1: const pw.FlexColumnWidth(2.25),
-              2: const pw.FlexColumnWidth(1.05),
-              3: const pw.FlexColumnWidth(1.22),
-              4: const pw.FlexColumnWidth(.45),
-            },
-            border: pw.TableBorder(horizontalInside: pw.BorderSide(color: _border)),
-            children: [
-              pw.TableRow(
-                  decoration: pw.BoxDecoration(color: _dark),
-                  children: [
-                    for (final head in ['#', 'PRODUCT', 'SIZE', 'MOQ', 'QTY'])
-                      pw.Padding(
-                          padding: const pw.EdgeInsets.all(9),
-                          child: _txt(head,
-                              color: PdfColors.white, size: 8, bold: true))
-                  ]),
-              for (var i = 0; i < items.length; i++)
-                pw.TableRow(
-                    decoration: pw.BoxDecoration(
-                        color: i.isEven ? PdfColors.white : _cream),
-                    children: [
-                      for (final v in [
-                        '${offset + i + 1}',
-                        _value(items[i].product.description),
-                        _value(items[i].product.sizeRange, '—'),
-                        _moq(items[i].product),
-                        '${items[i].quantity}',
-                      ])
-                        pw.Padding(
-                            padding: const pw.EdgeInsets.all(9),
-                            child: _txt(v, size: 8.5, lines: 2))
-                    ]),
-            ],
+          _text('Products at a glance', 29, _ink, bold: true),
+          pw.SizedBox(height: 8),
+          _text('MOQ = minimum order quantity  |  Qty = selected cart quantity',
+              9.5, _muted),
+          pw.SizedBox(height: 21),
+          _indexRow(
+            '#', 'PRODUCT', 'SIZE', 'MOQ', 'QTY', header: true,
           ),
+          ...rows.asMap().entries.map((e) {
+            final p = e.value.product;
+            return _indexRow(
+              '${offset + e.key + 1}',
+              _productName(p.description, p.itemCode),
+              _value(p.sizeRange),
+              '${_fmt(p.moq)} ${p.uom}'.trim(),
+              '${e.value.quantity}',
+              alternate: e.key.isOdd,
+            );
+          }),
           pw.Spacer(),
-          pw.Divider(color: _border),
-          pw.SizedBox(height: 8),
-          pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-            _txt('SELECTION INDEX', color: _muted, size: 8, bold: true),
-            _txt('GROUP $pageCount', color: _teal, size: 8, bold: true),
-          ]),
-          pw.SizedBox(height: 8),
-          _foot(ctx),
+          _footer('SELECTION INDEX',
+              indexCount > 1 ? 'GROUP $index OF $indexCount' : 'GROUP 1',
+              pageNumber),
         ],
       ),
     );
   }
 
-  static pw.Page _product(CartItem item, int index, int total,
-      List<pw.ImageProvider?> images) {
+  static pw.Widget _indexRow(
+    String no,
+    String product,
+    String size,
+    String moq,
+    String qty, {
+    bool header = false,
+    bool alternate = false,
+  }) {
+    final fg = header ? PdfColors.white : _ink;
+    return pw.Container(
+      height: header ? 33 : 40,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 11),
+      color: header ? _ink : (alternate ? _paper : PdfColors.white),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: [
+          pw.SizedBox(width: 31, child: _text(no, 9, fg, bold: header)),
+          pw.Expanded(flex: 7,
+              child: _text(product, 9, fg, bold: header, maxLines: 1)),
+          pw.Expanded(flex: 2,
+              child: _text(size, 9, fg, bold: header, maxLines: 1)),
+          pw.Expanded(flex: 3,
+              child: _text(moq, 9, fg, bold: header, maxLines: 1)),
+          pw.SizedBox(width: 34, child: _text(qty, 9, fg, bold: header)),
+        ],
+      ),
+    );
+  }
+
+  static pw.Page _productPage(
+    CartItem item,
+    List<pw.MemoryImage?> photos,
+    int productIndex,
+    int total,
+    int pageNumber,
+  ) {
     final p = item.product;
-    final fields = <List<String>>[
-      ['Item Code', _value(p.itemCode)],
-      ['Business', _value(p.business)],
-      ['Category', _value(p.productCategory)],
-      ['Sub Category', _value(p.subCategory)],
-      ['UOM', _value(p.uom)],
-      ['Weight', p.weight > 0 ? '${_num(p.weight)} g' : 'Not provided'],
-      ['FOB', _fob(p)],
-      ['CBM', _cbm(p)],
-      ['Material', _value(p.materialSpecification)],
-      ['Sub Inventory', _value(p.subInventoryCode)],
-      ['Organization ID', p.organizationId > 0 ? '${p.organizationId}' : 'Not provided'],
-      ['Display Room', _value(p.displayRoomName)],
-      ['Status', _value(p.status)],
-      ['Cart Quantity', '${item.quantity}'],
-    ];
+    final firstImage = photos.isNotEmpty ? photos.first : null;
     return pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.fromLTRB(36, 31, 36, 30),
-        build: (ctx) => pw.Column(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.fromLTRB(24, 21, 24, 24),
+      build: (_) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Container(
+            width: double.infinity,
+            height: 64,
+            padding: const pw.EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+            decoration: pw.BoxDecoration(
+              color: _ink,
+              borderRadius: pw.BorderRadius.circular(8),
+            ),
+            child: pw.Row(children: [
+              pw.Expanded(child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                mainAxisAlignment: pw.MainAxisAlignment.center,
+                children: [
+                  _text('PRODUCT ${_two(productIndex + 1)} / ${_two(total)}',
+                      7.5, _mint, bold: true),
+                  pw.SizedBox(height: 5),
+                  _text(_productName(p.description, p.itemCode),
+                      16, PdfColors.white, bold: true, maxLines: 1),
+                ],
+              )),
+              _pill('CART ${item.quantity}', _coral, PdfColors.white),
+            ]),
+          ),
+          pw.SizedBox(height: 10),
+          pw.Container(
+            height: 190,
+            width: double.infinity,
+            padding: const pw.EdgeInsets.all(6),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: _line),
+              borderRadius: pw.BorderRadius.circular(9),
+            ),
+            child: _photo(firstImage, 520, 175),
+          ),
+          pw.SizedBox(height: 13),
+          pw.Row(children: [
+            pw.Expanded(child: _highlight(
+              'SIZE RANGE', _value(p.sizeRange), _mint, _ink,
+            )),
+            pw.SizedBox(width: 11),
+            pw.Expanded(child: _highlight(
+              'MINIMUM ORDER QUANTITY',
+              '${_fmt(p.moq)} ${p.uom}'.trim(), _ink, PdfColors.white,
+            )),
+          ]),
+          pw.SizedBox(height: 14),
+          pw.Row(children: [
+            pw.Container(width: 4, height: 15, color: _coral),
+            pw.SizedBox(width: 8),
+            _text('Full product information', 11.5, _ink, bold: true),
+          ]),
+          pw.SizedBox(height: 9),
+          _specRow('ITEM CODE', p.itemCode, 'BUSINESS', p.business),
+          _specRow('CATEGORY', p.productCategory, 'SUB CATEGORY', p.subCategory),
+          _specRow('UOM', p.uom, 'WEIGHT',
+              p.weight > 0 ? '${_fmt(p.weight)} g' : '-'),
+          _specRow('FOB', p.fob > 0 ? _fmt(p.fob) : '-',
+              'CBM', p.cbm > 0 ? '${_fmt(p.cbm)} CBM' : '-'),
+          _specRow('MATERIAL', p.materialSpecification,
+              'SUB INVENTORY', p.subInventoryCode),
+          _specRow('ORGANIZATION ID', '${p.organizationId}',
+              'DISPLAY ROOM', p.displayRoomName),
+          _specRow('STATUS', p.status, 'CART QUANTITY', '${item.quantity}'),
+          pw.Spacer(),
+          _footer('AVAILABLE PHOTOS ${photos.where((p) => p != null).length}',
+              'DISPLAY ROOM / PRODUCT LOOKBOOK', pageNumber),
+        ],
+      ),
+    );
+  }
+
+  static pw.Page _galleryPage(
+    CartItem item,
+    List<pw.MemoryImage?> photos,
+    int productIndex,
+    int pageNumber,
+  ) {
+    final p = item.product;
+    final gallery = photos.isEmpty ? <pw.MemoryImage?>[null] : photos;
+    // Show up to four photos on one page, two per row. Duplicate photos are
+    // not added by the loader unless that is all the API actually returned.
+    final display = gallery.take(4).toList();
+    return pw.Page(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.fromLTRB(24, 30, 24, 24),
+      build: (_) => pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          _pill('PRODUCT ${productIndex + 1} / IMAGE GALLERY', _mint, _ink),
+          pw.SizedBox(height: 22),
+          _text(_productName(p.description, p.itemCode), 30, _ink,
+              bold: true, maxLines: 2),
+          pw.SizedBox(height: 10),
+          _text('Additional product photographs supplied by the server.',
+              10.5, _muted),
+          pw.SizedBox(height: 25),
+          for (var start = 0; start < display.length; start += 2) ...[
+            pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Container(
-                  padding: const pw.EdgeInsets.fromLTRB(16, 12, 16, 12),
-                  decoration: pw.BoxDecoration(
-                      color: _dark,
-                      borderRadius:
-                          const pw.BorderRadius.all(pw.Radius.circular(10))),
-                  child: pw.Row(children: [
-                    pw.Expanded(
-                        child: pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        _txt('PRODUCT ${index.toString().padLeft(2, '0')} / ${total.toString().padLeft(2, '0')}',
-                            color: _aqua, size: 8, bold: true),
-                        pw.SizedBox(height: 6),
-                        _txt(_value(p.description, 'Product $index'),
-                            color: PdfColors.white, size: 19, bold: true),
-                      ],
-                    )),
-                    pw.SizedBox(width: 12),
-                    _pill('CART ${item.quantity}',
-                        background: _coral, color: PdfColors.white)
-                  ]),
-                ),
-                pw.SizedBox(height: 10),
-                _image(images.isNotEmpty ? images.first : null, height: 193),
-                pw.SizedBox(height: 11),
-                pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                  children: [
-                    _stat('Size Range', _value(p.sizeRange)),
-                    _stat('Minimum Order Quantity', _moq(p), background: _dark,
-                        textColor: PdfColors.white),
-                  ],
-                ),
-                pw.SizedBox(height: 11),
-                _section('Full product information'),
-                pw.SizedBox(height: 9),
-                for (int i = 0; i < fields.length; i += 2) ...[
-                  pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        _field(fields[i][0], fields[i][1]),
-                        _field(fields[i + 1][0], fields[i + 1][1]),
-                      ]),
-                  pw.SizedBox(height: 5),
-                ],
-                pw.Spacer(),
-                pw.Divider(color: _border),
-                pw.Row(
-                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                    children: [
-                      _txt('AVAILABLE PHOTOS  ${images.where((i) => i != null).length}',
-                          color: _muted, size: 8),
-                      _foot(ctx)
-                    ])
+                pw.Expanded(child: _galleryCard(
+                  display[start], start + 1,
+                  height: display.length > 2 ? 204 : 292,
+                )),
+                pw.SizedBox(width: 15),
+                pw.Expanded(child: start + 1 < display.length
+                    ? _galleryCard(display[start + 1], start + 2,
+                        height: display.length > 2 ? 204 : 292)
+                    : pw.SizedBox()),
               ],
-            ));
+            ),
+            pw.SizedBox(height: 16),
+          ],
+          pw.Spacer(),
+          _footer('DISPLAY ROOM / PRODUCT LOOKBOOK', '', pageNumber),
+        ],
+      ),
+    );
   }
 
-  static pw.Page _gallery(CartItem item, int productNumber,
-      List<pw.ImageProvider?> group, int start) =>
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.fromLTRB(36, 36, 36, 32),
-        build: (ctx) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            _pill('PRODUCT $productNumber  /  IMAGE GALLERY'),
-            pw.SizedBox(height: 14),
-            _txt(_value(item.product.description), size: 25, bold: true),
-            pw.SizedBox(height: 7),
-            _txt('Additional product photographs supplied by the server.',
-                size: 9, color: _muted),
-            pw.SizedBox(height: 18),
-            for (int k = 0; k < group.length; k += 2) ...[
-              pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-                pw.Column(children: [
-                  _image(group[k], height: 244, width: 254),
-                  pw.SizedBox(height: 5),
-                  _txt('VIEW ${start + k + 1}', bold: true, color: _teal, size: 8)
-                ]),
-                if (k + 1 < group.length)
-                  pw.Column(children: [
-                    _image(group[k + 1], height: 244, width: 254),
-                    pw.SizedBox(height: 5),
-                    _txt('VIEW ${start + k + 2}',
-                        bold: true, color: _teal, size: 8)
-                  ])
-                else
-                  pw.SizedBox(width: 254),
-              ]),
-              pw.SizedBox(height: 12),
-            ],
-            pw.Spacer(),
-            pw.Divider(color: _border),
-            _foot(ctx),
-          ],
-        ),
-      );
-
-  static pw.Page _closing(int products, int qty, DateTime date) => pw.Page(
+  static pw.Page _thankYouPage(
+      int products, int totalUnits, String dateLabel) {
+    return pw.Page(
       pageFormat: PdfPageFormat.a4,
       margin: pw.EdgeInsets.zero,
-      build: (_) => pw.Stack(children: [
-        pw.Container(width: 595, height: 842, color: _dark),
+      build: (_) => pw.SizedBox(
+        width: _pageWidth,
+        height: _pageHeight,
+        child: pw.Stack(children: [
+        pw.Positioned(left: 0, top: 0,
+            child: pw.SizedBox(width: _pageWidth, height: _pageHeight,
+                child: pw.Container(color: _ink))),
+        pw.Positioned(left: 0, top: 0,
+            child: pw.SizedBox(width: _pageWidth, height: 9,
+                child: pw.Container(color: _coral))),
+        pw.Positioned(left: 58, top: 100,
+            child: _text('DISPLAY ROOM / PRODUCT LOOKBOOK',
+                9, _mint, bold: true)),
         pw.Positioned(
-            top: 0,
-            left: 0,
-            child: pw.Container(width: 595, height: 9, color: _coral)),
-        pw.Positioned(
-            left: 54,
-            top: 106,
-            child: _txt('DISPLAY ROOM  /  PRODUCT LOOKBOOK',
-                color: _aqua, bold: true, size: 10)),
-        pw.Positioned(
-            left: 59,
-            top: 318,
-            child: _txt('THANK YOU',
-                color: PdfColors.white, bold: true, size: 51)),
-        pw.Positioned(
-            left: 61,
-            top: 399,
-            child: _txt('Your selected products, all in one place.',
-                color: PdfColors.white, size: 15)),
-        pw.Positioned(
-          top: 475,
-          left: 59,
-          child: pw.Row(children: [
-            _pill('$products PRODUCTS', background: _aqua),
-            pw.SizedBox(width: 12),
-            _pill('$qty SELECTED UNITS', background: _coral, color: PdfColors.white),
-          ]),
+          left: 58, top: 328,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _text('THANK YOU', 55, PdfColors.white, bold: true),
+              pw.SizedBox(height: 17),
+              _text('Your selected products, all in one place.',
+                  15, PdfColors.white),
+              pw.SizedBox(height: 55),
+              pw.Row(children: [
+                _pill('$products PRODUCTS', _mint, _ink),
+                pw.SizedBox(width: 10),
+                _pill('$totalUnits SELECTED UNITS', _coral, PdfColors.white),
+              ]),
+            ],
+          ),
         ),
-        pw.Positioned(
-            bottom: 48,
-            left: 61,
-            child: _txt('GENERATED  ${_today(date)}',
-                color: PdfColors.white, bold: true, size: 9))
-      ]));
-
-  static List<String> _urls(ProductModel p) {
-    final seen = <String>{};
-    final result = <String>[];
-    for (final u in [...p.imageUrls, p.fileUrl]) {
-      final trimmed = u.trim();
-      if (trimmed.isNotEmpty && seen.add(trimmed)) result.add(trimmed);
-    }
-    return result.take(5).toList();
+        pw.Positioned(left: 58, top: 792,
+            child: _text('GENERATED $dateLabel', 9, PdfColors.white,
+                bold: true)),
+        ]),
+      ),
+    );
   }
 
-  /// Used by the existing CartPage PDF button. No new packages needed.
-  static Future<Uint8List> buildPdf({
-    required List<CartItem> items,
-    String imageBaseUrl = '',
-  }) async {
-    final pdf = pw.Document(
-        title: 'Display Room | Studio Product Catalogue',
-        author: 'Display Room',
-        creator: 'Display Room Flutter Application',
-        compress: true);
-    if (items.isEmpty) return pdf.save();
-    final now = DateTime.now();
-    final urls = items.map((row) => _urls(row.product)
-        .map((u) => _imageUrl(u, imageBaseUrl)).toList()).toList();
-    final pictures = <String, pw.ImageProvider?>{};
-    final unique = urls.expand((x) => x).where((x) => x.startsWith('http')).toSet().toList();
-    final client = http.Client();
+  static pw.Widget _galleryCard(pw.MemoryImage? photo, int number,
+      {required double height}) {
+    return pw.Column(
+      children: [
+        pw.Container(
+          height: height,
+          width: double.infinity,
+          padding: const pw.EdgeInsets.all(9),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: _line),
+            borderRadius: pw.BorderRadius.circular(11),
+          ),
+          child: _photo(photo, 245, height - 18),
+        ),
+        pw.SizedBox(height: 7),
+        _text('VIEW $number', 9, PdfColor.fromInt(0xFF208778), bold: true),
+      ],
+    );
+  }
+
+  static pw.Widget _specRow(
+      String aLabel, String aValue, String bLabel, String bValue) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 4),
+      child: pw.Row(children: [
+        pw.Expanded(child: _specCell(aLabel, aValue)),
+        pw.SizedBox(width: 10),
+        pw.Expanded(child: _specCell(bLabel, bValue)),
+      ]),
+    );
+  }
+
+  static pw.Widget _specCell(String label, String value) {
+    return pw.Container(
+      height: 37,
+      padding: const pw.EdgeInsets.fromLTRB(8, 5, 7, 3),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: _line),
+        borderRadius: pw.BorderRadius.circular(5),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        mainAxisAlignment: pw.MainAxisAlignment.center,
+        children: [
+          _text(label, 6.5, _muted, bold: true, maxLines: 1),
+          pw.SizedBox(height: 3),
+          _text(_value(value), 8.7, _ink, bold: true, maxLines: 1),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _highlight(
+      String label, String value, PdfColor bg, PdfColor fg) {
+    return pw.Container(
+      height: 61,
+      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: pw.BoxDecoration(
+        color: bg,
+        borderRadius: pw.BorderRadius.circular(7),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        mainAxisAlignment: pw.MainAxisAlignment.center,
+        children: [
+          _text(label, 7.1, fg, bold: true),
+          pw.SizedBox(height: 8),
+          _text(_value(value), 15, fg, bold: true, maxLines: 1),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _footer(String left, String right, int pageNumber) {
+    return pw.Column(children: [
+      pw.Container(height: 0.7, color: _line),
+      pw.SizedBox(height: 8),
+      pw.Row(children: [
+        pw.Expanded(child: _text(left, 7.5, _muted, bold: true)),
+        _text(right, 7.5, PdfColor.fromInt(0xFF208778), bold: true),
+      ]),
+      pw.SizedBox(height: 9),
+      pw.Row(children: [
+        pw.Expanded(child: _text('DISPLAY ROOM / PRODUCT LOOKBOOK',
+            7.5, _muted)),
+        _text('$pageNumber', 8, PdfColor.fromInt(0xFF208778), bold: true),
+      ]),
+    ]);
+  }
+
+  static pw.Widget _photo(pw.MemoryImage? photo, double width, double height) {
+    if (photo == null) {
+      return pw.Container(
+        width: width,
+        height: height,
+        alignment: pw.Alignment.center,
+        color: _paper,
+        child: _text('Product image not available', 10, _muted),
+      );
+    }
+    return pw.Center(
+      child: pw.Image(photo, width: width, height: height,
+          fit: pw.BoxFit.contain),
+    );
+  }
+
+  static pw.Widget _pill(String value, PdfColor bg, PdfColor fg) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: pw.BoxDecoration(
+        color: bg,
+        borderRadius: pw.BorderRadius.circular(20),
+      ),
+      child: _text(value, 8, fg, bold: true),
+    );
+  }
+
+  static pw.Widget _text(String value, double size, PdfColor color,
+      {bool bold = false, int? maxLines}) {
+    return pw.Text(
+      value,
+      maxLines: maxLines,
+      overflow: maxLines == null ? pw.TextOverflow.visible : pw.TextOverflow.clip,
+      style: pw.TextStyle(
+        color: color,
+        fontSize: size,
+        fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+      ),
+    );
+  }
+
+  static String _value(String? text) {
+    final result = (text ?? '').trim();
+    return result.isEmpty ? '-' : result;
+  }
+
+  static String _productName(String name, String fallback) =>
+      name.trim().isEmpty ? fallback : name.trim();
+
+  static String _fmt(num value) =>
+      value == value.truncateToDouble()
+          ? value.toInt().toString()
+          : value.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+
+  static String _two(int value) => value.toString().padLeft(2, '0');
+
+  static Future<List<pw.MemoryImage?>> _loadGallery(
+    CartItem item,
+    String imageBaseUrl,
+    Map<String, Future<pw.MemoryImage?>> cache,
+  ) async {
+    final p = item.product;
+    final urls = <String>[];
+    final seen = <String>{};
+    for (final original in [...p.imageUrls, p.fileUrl]) {
+      final url = _resolvedUrl(original, imageBaseUrl);
+      if (url.isNotEmpty && seen.add(url)) urls.add(url);
+      if (urls.length >= 4) break;
+    }
+    if (urls.isEmpty) return [null];
+    final photos = await Future.wait(urls.map(
+      (url) => cache.putIfAbsent(url, () => _download(url)),
+    ));
+    final available = photos.whereType<pw.MemoryImage>().toList();
+    return available.isEmpty ? [null] : available;
+  }
+
+  static String _resolvedUrl(String original, String imageBaseUrl) {
+    final trimmed = original.trim();
+    if (trimmed.isEmpty || trimmed.toLowerCase() == 'null') return '';
+    final absolute = Uri.tryParse(trimmed);
+    if (absolute != null &&
+        (absolute.scheme == 'https' || absolute.scheme == 'http') &&
+        absolute.host.isNotEmpty) {
+      return trimmed;
+    }
+    final base = imageBaseUrl.replaceFirst(RegExp(r'/+$'), '');
+    if (base.isEmpty) return '';
+    return '$base/${trimmed.replaceFirst(RegExp(r'^/+'), '')}';
+  }
+
+  static Future<pw.MemoryImage?> _download(String url) async {
     try {
-      // At most 4 HTTP requests in parallel, even with a very large cart.
-      // Avoids a flood of image requests and repeatedly fetching a shared URL.
-      var next = 0;
-      Future<void> worker() async {
-        while (next < unique.length) {
-          final url = unique[next++];
-          try {
-            final res = await client.get(Uri.parse(url))
-                .timeout(const Duration(seconds: 15));
-            if (res.statusCode == 200 && res.bodyBytes.isNotEmpty &&
-                res.bodyBytes.length <= 24 * 1024 * 1024) {
-              pictures[url] = pw.MemoryImage(res.bodyBytes);
-            } else {
-              pictures[url] = null;
-            }
-          } catch (_) {
-            pictures[url] = null;
-          }
-        }
-      }
-      await Future.wait(List.generate(
-          unique.length < 4 ? unique.length : 4, (_) => worker()));
-    } finally {
-      client.close();
+      final response = await http.get(Uri.parse(url), headers: {
+        'Accept': 'image/jpeg,image/png,image/*',
+      }).timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200 || response.bodyBytes.isEmpty) return null;
+      // dart_pdf reliably accepts JPEG/PNG. Gracefully skip other formats.
+      final bytes = response.bodyBytes;
+      final jpeg = bytes.length > 2 && bytes[0] == 0xFF && bytes[1] == 0xD8;
+      final png = bytes.length > 4 &&
+          bytes[0] == 0x89 && bytes[1] == 0x50 &&
+          bytes[2] == 0x4E && bytes[3] == 0x47;
+      if (!jpeg && !png) return null;
+      return pw.MemoryImage(bytes);
+    } catch (_) {
+      return null;
     }
-    final images = urls.map((row) => row.map((u) => pictures[u]).toList()).toList();
-    final qty = items.fold<int>(0, (v, x) => v + x.quantity);
-    pdf.addPage(_cover(items, now,
-        images.first.isNotEmpty ? images.first.first : null));
-    for (var i = 0; i < items.length; i += 10) {
-      final end = i + 10 > items.length ? items.length : i + 10;
-      pdf.addPage(_overview(items.sublist(i, end), i, 1 + i ~/ 10));
-    }
-    for (var i = 0; i < items.length; i++) {
-      pdf.addPage(_product(items[i], i + 1, items.length, images[i]));
-      // Galleries have their own pages and never overflow, even with 5 images.
-      if (images[i].length > 1) {
-        for (var k = 0; k < images[i].length; k += 4) {
-          final end = k + 4 > images[i].length ? images[i].length : k + 4;
-          pdf.addPage(_gallery(items[i], i + 1, images[i].sublist(k, end), k));
-        }
-      }
-    }
-    pdf.addPage(_closing(items.length, qty, now));
-    return pdf.save();
   }
 }

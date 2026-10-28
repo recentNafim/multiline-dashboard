@@ -1,45 +1,45 @@
 import '../models/cart_item.dart';
-import '../models/product_model.dart';
 import 'presentation_bridge.dart';
 
-/// Maps all available server-backed fields to the browser PowerPoint generator.
-/// No fabricated values: missing information is shown as "Not specified".
+/// PowerPoint report payload for the matching premium PDF catalogue.
+///
+/// Source fields are taken from the actual GET product model. Deliberately
+/// does not send the cart quantity: the client requested to remove Qty from
+/// both Summary and Product Details in the presentation.
 class CartPresentationService {
-  static String _number(num v) => v == v.roundToDouble()
-      ? v.toInt().toString()
-      : v.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
-
-  static String _toUrl(String input, String base) {
-    final u = input.trim();
-    if (u.isEmpty) return '';
-    if (u.startsWith('https://') || u.startsWith('http://')) return u;
-    if (u.startsWith('/ords/')) {
-      final parsed = Uri.tryParse(base);
-      if (parsed != null && parsed.hasAuthority) {
-        return '${parsed.scheme}://${parsed.authority}$u';
-      }
-    }
-    return '${base.replaceFirst(RegExp(r"/+$"), "")}/${u.replaceFirst(RegExp(r"^/+"), "").split('/').map(Uri.encodeComponent).join('/')}';
-  }
-
-  static String _cbm(ProductModel p) => p.cbmRaw.trim().isNotEmpty
-      ? p.cbmRaw
-      : (p.cbm > 0 ? _number(p.cbm) : '');
-
   static Future<void> generate({
     required List<CartItem> items,
     String imageBaseUrl = '',
   }) async {
     if (items.isEmpty) throw StateError('Cart is empty');
 
-    final entries = items.map((row) {
-      final p = row.product;
-      final urls = <String>[];
-      final seen = <String>{};
-      for (final u in [...p.imageUrls, p.fileUrl]) {
-        final normalized = _toUrl(u, imageBaseUrl);
-        if (normalized.isNotEmpty && seen.add(normalized)) urls.add(normalized);
+    String absoluteImageUrl(String raw) {
+      final value = raw.trim();
+      if (value.isEmpty) return '';
+      if (value.startsWith('https://') || value.startsWith('http://') ||
+          value.startsWith('data:image/')) {
+        return value;
       }
+      final base = imageBaseUrl.replaceFirst(RegExp(r'/+$'), '');
+      if (base.isEmpty) return '';
+      return '$base/${value.replaceFirst(RegExp(r'^/+'), '')}';
+    }
+
+    final entries = items.map((line) {
+      final p = line.product;
+      final imageUrls = <String>[];
+      final seen = <String>{};
+
+      void addImage(String value) {
+        final url = absoluteImageUrl(value);
+        if (url.isNotEmpty && seen.add(url)) imageUrls.add(url);
+      }
+
+      for (final image in p.imageUrls) {
+        addImage(image);
+      }
+      addImage(p.fileUrl);
+
       return <String, Object?>{
         'itemCode': p.itemCode,
         'description': p.description,
@@ -47,24 +47,26 @@ class CartPresentationService {
         'business': p.business,
         'category': p.productCategory,
         'subCategory': p.subCategory,
-        'organizationId': p.organizationId > 0 ? p.organizationId : null,
+        'uom': p.uom,
+        'sizeRange': p.sizeRange,
+        'moq': p.moq,
+        'fob': p.fob,
+        'weight': p.weight,
+        'cbm': p.cbm,
+        'material': p.materialSpecification,
+        'subInventory': p.subInventoryCode,
+        'organizationId': p.organizationId,
         'displayRoom': p.displayRoomName,
         'status': p.status,
-        'subInventory': p.subInventoryCode,
-        'material': p.materialSpecification,
-        'weightG': p.weight > 0 ? p.weight : null,
-        'cbm': _cbm(p),
-        'fob': p.fob,
-        'uom': p.uom,
-        'quantity': row.quantity, // Cart-selected units; NOT MOQ.
-        'sizeRange': p.sizeRange,
-        'moq': p.moq > 0 ? p.moq : null,
-        'imageUrl': urls.isNotEmpty ? urls.first : '',
-        'images': urls.take(5).toList(),
+        'imageUrl': imageUrls.isEmpty ? '' : imageUrls.first,
+        'images': imageUrls,
       };
     }).toList();
+
     final stamp = DateTime.now().millisecondsSinceEpoch;
     await generateProductPresentation(
-      entries, 'Display_Room_FULL_INFO_V6_$stamp.pptx');
+      entries,
+      'display-room-premium-lookbook-$stamp.pptx',
+    );
   }
 }

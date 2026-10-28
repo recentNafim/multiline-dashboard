@@ -89,9 +89,7 @@ class ProductCard extends StatelessWidget {
                 horizontal: 12,
               ),
               child: Text(
-                product.itemCode.trim().isEmpty
-                    ? 'Item Code: Not assigned'
-                    : product.itemCode,
+                product.itemCode,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(

@@ -19,9 +19,8 @@ class ProductModel {
   final double quantity;
   final String materialSpecification;
   final double cbm;
-  final String cbmRaw;
-  final double? fob;
   final double weight;
+  final double fob;
   final String fileUrl;
   final String fileName;
   final String mimeType;
@@ -46,21 +45,14 @@ class ProductModel {
     required this.quantity,
     required this.materialSpecification,
     required this.cbm,
-    this.cbmRaw = '',
-    this.fob,
     required this.weight,
+    this.fob = 0,
     required this.fileUrl,
     required this.fileName,
     required this.mimeType,
   });
 
-  // No-code products must still have independent cart entries.
-  String get cartKey {
-    final identity = itemCode.trim().isNotEmpty
-        ? itemCode
-        : (fileUrl.trim().isNotEmpty ? fileUrl : description);
-    return '$masterSl-$identity-${sizeRange.isEmpty ? locatorId : sizeRange}';
-  }
+  String get cartKey => '$masterSl-$itemCode-${sizeRange.isEmpty ? locatorId : sizeRange}';
 
   double get moq => quantity;
 
@@ -97,9 +89,8 @@ class ProductModel {
       materialSpecification:
           _toString(detail['material_specification']),
       cbm: _toDouble(detail['cbm']),
-      cbmRaw: _toString(detail['cbm']),
-      fob: _toNullableDouble(detail['fob']),
       weight: _toDouble(detail['weight']),
+      fob: _toDouble(detail['fob']),
       fileUrl: _toString(detail['file_url']),
       fileName: _toString(detail['file_name']),
       mimeType: _toString(detail['mime_type']),
@@ -210,12 +201,6 @@ class ProductModel {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return int.tryParse(value?.toString() ?? '') ?? 0;
-  }
-
-  static double? _toNullableDouble(dynamic value) {
-    if (value == null) return null;
-    if (value is num) return value.toDouble();
-    return double.tryParse(value.toString());
   }
 
   static double _toDouble(dynamic value) {

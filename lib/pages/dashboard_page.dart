@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
@@ -6,7 +5,7 @@ import '../controllers/product_controller.dart';
 import '../controllers/cart_controller.dart';
 import '../models/product_model.dart';
 import '../widgets/product_image_carousel.dart';
-import '../widgets/cart_icon_button.dart';
+import 'cart_page.dart';
 import 'product_detail_page.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -27,8 +26,8 @@ class _DashboardPageState extends State<DashboardPage> {
   String? _selectedCategory;
   String? _selectedSubCategory;
 
-  // Fixed filter choices. Category maps to the API's master BUSINESS field;
-  // Sub Category maps to master SUB_CATEGORY. No lookup API is necessary.
+  // Fixed client-approved dropdown choices. Filtering is performed against
+  // GET response master fields `business` and `sub_category`.
   static const List<String> _categoryOptions = <String>[
     'Footwear',
     'Bag & Luggage',
@@ -36,12 +35,14 @@ class _DashboardPageState extends State<DashboardPage> {
     'Umbrella',
     'Handicraft',
   ];
+
   static const List<String> _subCategoryOptions = <String>[
-    'Export', 'Domestic',
+    'Export',
+    'Domestic',
   ];
 
   // ================================================================
-  // IMAGE URL (unchanged)
+  // IMAGE URL
   // ================================================================
   static const String _serverBaseUrl =
       'https://e501.sihirbox.com:8071';
@@ -538,21 +539,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // Only comparisons are normalized; the Oracle BUSINESS and SUB_CATEGORY
-  // values are preserved. Historic data sometimes spells Footwear as Footware.
-  static String _normalizeFilterValue(String value) {
-    final normalized = value.trim().toLowerCase()
-        .replaceAll('&', 'and')
-        .replaceAll(RegExp(r'\s+'), ' ');
-    if (normalized == 'footware') return 'footwear';
-    return normalized;
-  }
-
-  static bool _matchesFilter(String actual, String? selected) {
-    return selected == null || selected.isEmpty ||
-        _normalizeFilterValue(actual) == _normalizeFilterValue(selected);
-  }
-
   // ================================================================
   // FILTERED PRODUCTS
   // ================================================================
@@ -596,10 +582,19 @@ class _DashboardPageState extends State<DashboardPage> {
               organizationCode.toLowerCase().contains(search) ||
               status.toLowerCase().contains(search);
 
-      // Category = master.business; Sub Category = master.sub_category.
-      final bool matchesCategory = _matchesFilter(business, _selectedCategory);
+      // Exact, case-insensitive matches against the GET API MASTER fields:
+      // business = category, sub_category = subcategory.
+      final bool matchesCategory =
+          _selectedCategory == null ||
+              _selectedCategory!.isEmpty ||
+              business.trim().toLowerCase() ==
+                  _selectedCategory!.trim().toLowerCase();
+
       final bool matchesSubCategory =
-          _matchesFilter(subCategory, _selectedSubCategory);
+          _selectedSubCategory == null ||
+              _selectedSubCategory!.isEmpty ||
+              subCategory.trim().toLowerCase() ==
+                  _selectedSubCategory!.trim().toLowerCase();
 
       return matchesSearch &&
           matchesCategory &&
@@ -608,7 +603,9 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // ================================================================
-  // CATEGORY + SUB CATEGORY: fixed, independent dropdown options.
+  // HARDCODED FILTER OPTIONS
+  // GET API: data[].business and data[].sub_category (master fields).
+  // These options do NOT depend on the product list or metadata API.
   // ================================================================
   List<String> get categoryList => _categoryOptions;
   List<String> get subCategoryList => _subCategoryOptions;
@@ -712,10 +709,12 @@ class _DashboardPageState extends State<DashboardPage> {
       width: 220,
       child:
       DropdownButtonFormField<String>(
-        key: ValueKey<String>('top-category-${safeCategory ?? 'all'}'),
-        value: safeCategory,
+        key: ValueKey<String>("top-category-${safeCategory ?? ''}"),
+        value: safeCategory ?? '',
         isExpanded: true,
-        hint: const Text('All Categories'),
+        hint: Text(
+          'All Categories',
+        ),
         decoration: InputDecoration(
           labelText: 'Category',
           prefixIcon: const Icon(
@@ -738,8 +737,12 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ),
         ),
-        items: categories
-            .map(
+        items: <DropdownMenuItem<String>>[
+          const DropdownMenuItem<String>(
+            value: '',
+            child: Text('All Categories'),
+          ),
+          ...categories.map(
               (category) =>
               DropdownMenuItem<String>(
                 value: category,
@@ -749,12 +752,12 @@ class _DashboardPageState extends State<DashboardPage> {
                   TextOverflow.ellipsis,
                 ),
               ),
-        )
-            .toList(),
+        ),
+        ],
         onChanged: (value) {
           setState(() {
             _selectedCategory =
-                value;
+                value == null || value.isEmpty ? null : value;
 
             // Category changes =>
             // reset dependent sub category.
@@ -770,8 +773,8 @@ class _DashboardPageState extends State<DashboardPage> {
       width: 220,
       child:
       DropdownButtonFormField<String>(
-        key: ValueKey<String>('top-subcategory-${safeSubCategory ?? 'all'}'),
-        value: safeSubCategory,
+        key: ValueKey<String>("top-sub-${safeCategory ?? ''}-${safeSubCategory ?? ''}"),
+        value: safeSubCategory ?? '',
         isExpanded: true,
         hint: Text(
           'All Sub Categories',
@@ -798,8 +801,12 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ),
         ),
-        items: subCategories
-            .map(
+        items: <DropdownMenuItem<String>>[
+          const DropdownMenuItem<String>(
+            value: '',
+            child: Text('All Sub Categories'),
+          ),
+          ...subCategories.map(
               (subCategory) =>
               DropdownMenuItem<String>(
                 value: subCategory,
@@ -809,12 +816,12 @@ class _DashboardPageState extends State<DashboardPage> {
                   TextOverflow.ellipsis,
                 ),
               ),
-        )
-            .toList(),
+        ),
+        ],
         onChanged: (value) {
           setState(() {
             _selectedSubCategory =
-                value;
+                value == null || value.isEmpty ? null : value;
           });
         },
       ),
@@ -947,6 +954,91 @@ class _DashboardPageState extends State<DashboardPage> {
     super.dispose();
   }
 
+
+  // ==================================================================
+  // CART ACTIONS: clearing affects only the local shopping cart.
+  // Product records and server-side data are never deleted.
+  // ==================================================================
+  Future<void> _confirmClearCart() async {
+    final CartController cart = Get.find<CartController>();
+    if (cart.totalItems == 0) return;
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear Cart?'),
+        content: Text(
+          'Remove all ${cart.totalItems} item(s) from your cart? '
+          'This will not delete any product records.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Clear Cart'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    cart.clearCart();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Cart cleared successfully'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _openCart() {
+    Get.to(() => const CartPage());
+  }
+
+  Widget _buildCartHeaderActions() {
+    final bool compact = MediaQuery.sizeOf(context).width < 630;
+    final CartController cart = Get.find<CartController>();
+
+    return Obx(() {
+      final int itemCount = cart.totalItems;
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (compact)
+            IconButton(
+              tooltip: 'Clear Cart',
+              onPressed: itemCount > 0 ? _confirmClearCart : null,
+              icon: const Icon(Icons.delete_sweep_outlined),
+            )
+          else
+            OutlinedButton.icon(
+              onPressed: itemCount > 0 ? _confirmClearCart : null,
+              icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+              label: const Text('Clear'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFC62828),
+                side: const BorderSide(color: Color(0xFFEF9A9A)),
+              ),
+            ),
+          const SizedBox(width: 8),
+          FilledButton.tonalIcon(
+            onPressed: _openCart,
+            icon: const Icon(Icons.shopping_bag_outlined, size: 19),
+            label: Text(itemCount > 0 ? 'Cart ($itemCount)' : 'Cart'),
+            style: FilledButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              minimumSize: const Size(0, 42),
+            ),
+          ),
+          const SizedBox(width: 12),
+        ],
+      );
+    });
+  }
+
   // ================================================================
   // BUILD
   // ================================================================
@@ -982,14 +1074,14 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ],
         ),
-        actions: const [
-          CartIconButton(),
-          SizedBox(width: 8),
+        actions: [
+          _buildCartHeaderActions(),
         ],
       ),
 
       body: Column(
         children: [
+          // Fixed dropdowns stay visible even before GET products load.
           _buildTopFilterBar(),
           Expanded(
             child: Obx(() {
@@ -1436,71 +1528,71 @@ class _DashboardPageState extends State<DashboardPage> {
                          ),
                        ),
 
-                     // ==================================================
-                     // FOOTER
                     // ==================================================
+                    // FOOTER: explicit quick-add and detail access.
+                    // ==================================================
+                    if (sl.trim().isNotEmpty ||
+                        (detailsCount.trim().isNotEmpty && detailsCount != '0'))
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          [
+                            if (sl.trim().isNotEmpty) 'SL: $sl',
+                            if (detailsCount.trim().isNotEmpty && detailsCount != '0')
+                              'Items: $detailsCount',
+                          ].join('   '),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFF9299A5),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     Row(
                       children: [
-                        if (sl.trim().isNotEmpty)
-                          Text(
-                            'SL: $sl',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color:
-                              Color(0xFF9299A5),
-                              fontWeight:
-                              FontWeight.w500,
+                        if (item is ProductModel) ...[
+                          Expanded(
+                            flex: 6,
+                            child: FilledButton.tonalIcon(
+                              onPressed: () => Get.find<CartController>().addToCart(item),
+                              icon: const Icon(Icons.add_shopping_cart_outlined, size: 17),
+                              label: const Text(
+                                'Add to Cart',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(0, 38),
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                              ),
                             ),
                           ),
-
-                        if (detailsCount
-                            .trim()
-                            .isNotEmpty &&
-                            detailsCount != '0') ...[
-                          const SizedBox(width: 10),
-                          Text(
-                            'Items: $detailsCount',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color:
-                              Color(0xFF9299A5),
-                              fontWeight:
-                              FontWeight.w500,
-                            ),
-                          ),
+                          const SizedBox(width: 6),
                         ],
-
-                        const Spacer(),
-
-                         if (item is ProductModel)
-                           IconButton.filledTonal(
-                             tooltip: 'Add to Cart',
-                             icon: const Icon(Icons.add_shopping_cart_outlined, size: 17),
-                             onPressed: () => Get.find<CartController>().addToCart(item),
-                           ),
-                         const SizedBox(width: 4),
-
-                         Text(
-                           'View Details',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight:
-                            FontWeight.w700,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .primary,
+                        Expanded(
+                          flex: 5,
+                          child: TextButton(
+                            onPressed: () => _openDetailPage(item),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              minimumSize: const Size(0, 38),
+                            ),
+                            child: const FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'View Details',
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                                  ),
+                                  SizedBox(width: 3),
+                                  Icon(Icons.arrow_forward_ios_rounded, size: 11),
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
-
-                        const SizedBox(width: 4),
-
-                        Icon(
-                          Icons
-                              .arrow_forward_ios_rounded,
-                          size: 11,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .primary,
                         ),
                       ],
                     ),
@@ -1695,6 +1787,21 @@ class _DashboardPageState extends State<DashboardPage> {
 
             const Divider(height: 1),
 
+            // A named Cart option makes cart access discoverable in the drawer.
+            Obx(() {
+              final int itemCount = Get.find<CartController>().totalItems;
+              return ListTile(
+                leading: const Icon(Icons.shopping_bag_outlined),
+                title: const Text('My Cart'),
+                trailing: Text('$itemCount'),
+                onTap: () {
+                  Navigator.of(context).pop();
+                  _openCart();
+                },
+              );
+            }),
+            const Divider(height: 1),
+
             // ========================================================
             // FILTER CONTENT
             // ========================================================
@@ -1805,8 +1912,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
                     DropdownButtonFormField<
                         String>(
-                      key: ValueKey<String>('drawer-category-${safeCategory ?? 'all'}'),
-                      value: safeCategory,
+                      key: ValueKey<String>('drawer-category-${safeCategory ?? ''}'),
+                      value: safeCategory ?? '',
                       isExpanded: true,
                       hint: const Text(
                         'All Categories',
@@ -1841,8 +1948,12 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                         ),
                       ),
-                      items: categories
-                          .map(
+                      items: <DropdownMenuItem<String>>[
+                        const DropdownMenuItem<String>(
+                          value: '',
+                          child: Text('All Categories'),
+                        ),
+                        ...categories.map(
                             (
                             category,
                             ) =>
@@ -1856,12 +1967,12 @@ class _DashboardPageState extends State<DashboardPage> {
                                     .ellipsis,
                               ),
                             ),
-                      )
-                          .toList(),
+                      ),
+                      ],
                       onChanged: (value) {
                         setState(() {
                           _selectedCategory =
-                              value;
+                              value == null || value.isEmpty ? null : value;
                           _selectedSubCategory =
                           null;
                         });
@@ -1886,8 +1997,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
                     DropdownButtonFormField<
                         String>(
-                      key: ValueKey<String>('drawer-subcategory-${safeSubCategory ?? 'all'}'),
-                      value: safeSubCategory,
+                      key: ValueKey<String>(
+                        'drawer-sub-${safeCategory ?? ''}-${safeSubCategory ?? ''}',
+                      ),
+                      value: safeSubCategory ?? '',
                       isExpanded: true,
                       hint: Text(
                         'All Sub Categories',
@@ -1922,8 +2035,12 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                         ),
                       ),
-                      items: subCategories
-                          .map(
+                      items: <DropdownMenuItem<String>>[
+                        const DropdownMenuItem<String>(
+                          value: '',
+                          child: Text('All Sub Categories'),
+                        ),
+                        ...subCategories.map(
                             (
                             category,
                             ) =>
@@ -1937,12 +2054,12 @@ class _DashboardPageState extends State<DashboardPage> {
                                     .ellipsis,
                               ),
                             ),
-                      )
-                          .toList(),
+                      ),
+                      ],
                       onChanged: (value) {
                         setState(() {
                           _selectedSubCategory =
-                              value;
+                              value == null || value.isEmpty ? null : value;
                         });
                       },
                     ),

@@ -28,6 +28,40 @@ class CartPage extends GetView<CartController> {
             fontWeight: FontWeight.w700,
           ),
         ),
+        actions: [
+          // Clear the cart directly from the top-right of this page.
+          // The reactive button is disabled when no items remain.
+          Obx(() {
+            final bool hasItems = controller.items.isNotEmpty;
+            final bool compact = MediaQuery.sizeOf(context).width < 390;
+
+            return Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: compact
+                  ? IconButton(
+                      tooltip: 'Clear Cart',
+                      onPressed: hasItems
+                          ? () => _confirmClearCart(context)
+                          : null,
+                      icon: const Icon(Icons.delete_sweep_outlined),
+                      color: const Color(0xFFC62828),
+                    )
+                  : TextButton.icon(
+                      onPressed: hasItems
+                          ? () => _confirmClearCart(context)
+                          : null,
+                      icon: const Icon(
+                        Icons.delete_sweep_outlined,
+                        size: 19,
+                      ),
+                      label: const Text('Clear Cart'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFFC62828),
+                      ),
+                    ),
+            );
+          }),
+        ],
       ),
 
       // ==============================================================
@@ -153,6 +187,52 @@ class CartPage extends GetView<CartController> {
           ),
         );
       }),
+    );
+  }
+
+  // ==================================================================
+  // CLEAR ALL CART ITEMS (LOCAL ONLY)
+  // ==================================================================
+  Future<void> _confirmClearCart(BuildContext context) async {
+    if (controller.items.isEmpty) return;
+
+    final int itemCount = controller.totalItems;
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Clear Cart?'),
+        content: Text(
+          'Remove all $itemCount item(s) from your cart? '
+          'This will not delete any product records.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+            label: const Text('Clear Cart'),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFFC62828),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted || controller.items.isEmpty) {
+      return;
+    }
+
+    controller.clearCart();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Cart cleared successfully'),
+        duration: Duration(seconds: 2),
+      ),
     );
   }
 
@@ -480,50 +560,19 @@ class _CartItemCard extends StatelessWidget {
                 const SizedBox(height: 12),
 
                 // ====================================================
-                // QUANTITY
+                // REMOVE ITEM
+                // Quantity +/- controls intentionally hidden per client request.
                 // ====================================================
-                Row(
-                  children: [
-                    _QtyButton(
-                      icon: Icons.remove,
-                      onTap: () {
-                        cart.decrement(cartKey);
-                      },
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: IconButton(
+                    tooltip: 'Remove',
+                    onPressed: () => cart.remove(cartKey),
+                    icon: const Icon(
+                      Icons.delete_outline_rounded,
+                      color: Colors.redAccent,
                     ),
-
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                      ),
-                      child: Text(
-                        '${item.quantity}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-
-                    _QtyButton(
-                      icon: Icons.add,
-                      onTap: () {
-                        cart.increment(cartKey);
-                      },
-                    ),
-
-                    const Spacer(),
-
-                    IconButton(
-                      tooltip: 'Remove',
-                      onPressed: () {
-                        cart.remove(cartKey);
-                      },
-                      icon: const Icon(
-                        Icons.delete_outline_rounded,
-                        color: Colors.redAccent,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
@@ -1016,44 +1065,6 @@ class _CartProductImage extends StatelessWidget {
               );
             },
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// ====================================================================
-// QUANTITY BUTTON
-// ====================================================================
-class _QtyButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _QtyButton({
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius:
-          BorderRadius.circular(10),
-      child: Container(
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(
-          color: const Color(
-            0xFFF1F3F7,
-          ),
-          borderRadius:
-              BorderRadius.circular(10),
-        ),
-        alignment: Alignment.center,
-        child: Icon(
-          icon,
-          size: 18,
         ),
       ),
     );
