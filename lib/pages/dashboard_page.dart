@@ -1,8 +1,6 @@
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:http/http.dart' as http;
 
 import '../controllers/product_controller.dart';
 import '../controllers/cart_controller.dart';
@@ -29,251 +27,27 @@ class _DashboardPageState extends State<DashboardPage> {
   String? _selectedCategory;
   String? _selectedSubCategory;
 
-  // Updated GET API top-level filter metadata.
-  final List<String> _apiCategoryList = <String>[];
-  final Map<String, List<String>> _apiSubCategoryMap =
-  <String, List<String>>{};
-
-  bool _isFilterMetaLoading = false;
-
-  static const String _productApiUrl =
-      'https://e501.sihirbox.com:8071/ords/rpro/'
-      'multiline-display-room/item-upload';
+  // Fixed filter choices. Category maps to the API's master BUSINESS field;
+  // Sub Category maps to master SUB_CATEGORY. No lookup API is necessary.
+  static const List<String> _categoryOptions = <String>[
+    'Footwear',
+    'Bag & Luggage',
+    'Tent',
+    'Umbrella',
+    'Handicraft',
+  ];
+  static const List<String> _subCategoryOptions = <String>[
+    'Export', 'Domestic',
+  ];
 
   // ================================================================
-  // IMAGE URL
+  // IMAGE URL (unchanged)
   // ================================================================
   static const String _serverBaseUrl =
       'https://e501.sihirbox.com:8071';
 
   static const String _imageBaseUrl =
       'https://e501.sihirbox.com:8071/ords/rpro/image_service/get/';
-
-  @override
-  void initState() {
-    super.initState();
-
-    // Category/Sub Category list comes from the updated GET API.
-    _loadCategoryAndSubCategory();
-  }
-
-  // ================================================================
-  // LOAD CATEGORY + CATEGORY-WISE SUB CATEGORY
-  // ================================================================
-  Future<void> _loadCategoryAndSubCategory() async {
-    if (_isFilterMetaLoading) {
-      return;
-    }
-
-    setState(() {
-      _isFilterMetaLoading = true;
-    });
-
-    try {
-      // Only 1 master row is enough here because category metadata
-      // is returned at the top level of the response.
-      final Uri uri = Uri.parse(_productApiUrl).replace(
-        queryParameters: const {
-          'p_page': '1',
-          'p_limit': '1',
-        },
-      );
-
-      debugPrint('==========================================');
-      debugPrint('LOAD CATEGORY / SUB CATEGORY');
-      debugPrint('URL => $uri');
-      debugPrint('==========================================');
-
-      final http.Response response = await http
-          .get(
-        uri,
-        headers: const {
-          'Accept': 'application/json',
-        },
-      )
-          .timeout(
-        const Duration(seconds: 60),
-      );
-
-      debugPrint(
-        'CATEGORY API STATUS => ${response.statusCode}',
-      );
-
-      if (response.statusCode < 200 ||
-          response.statusCode >= 300) {
-        throw Exception(
-          'HTTP ${response.statusCode}',
-        );
-      }
-
-      final dynamic decoded =
-      jsonDecode(response.body);
-
-      if (decoded is! Map) {
-        throw Exception(
-          'Invalid category API response.',
-        );
-      }
-
-      // --------------------------------------------------------------
-      // CATEGORY LIST
-      // --------------------------------------------------------------
-      final List<String> categories =
-      <String>[];
-
-      final dynamic rawCategories =
-      decoded['category_list'];
-
-      if (rawCategories is List) {
-        for (final dynamic value
-        in rawCategories) {
-          final String category =
-              value?.toString().trim() ?? '';
-
-          if (category.isNotEmpty &&
-              !categories.contains(category)) {
-            categories.add(category);
-          }
-        }
-      }
-
-      categories.sort(
-            (a, b) => a
-            .toLowerCase()
-            .compareTo(
-          b.toLowerCase(),
-        ),
-      );
-
-      // --------------------------------------------------------------
-      // CATEGORY-WISE SUB CATEGORY
-      // --------------------------------------------------------------
-      final Map<String, List<String>>
-      subCategoryMap =
-      <String, List<String>>{};
-
-      final dynamic rawCategoryWise =
-      decoded[
-      'category_wise_sub_category_list'];
-
-      if (rawCategoryWise is List) {
-        for (final dynamic row
-        in rawCategoryWise) {
-          if (row is! Map) {
-            continue;
-          }
-
-          final String category =
-              row['category']
-                  ?.toString()
-                  .trim() ??
-                  '';
-
-          if (category.isEmpty) {
-            continue;
-          }
-
-          final List<String> subCategories =
-          <String>[];
-
-          final dynamic rawSubs =
-          row['sub_categories'];
-
-          if (rawSubs is List) {
-            for (final dynamic subValue
-            in rawSubs) {
-              final String subCategory =
-                  subValue
-                      ?.toString()
-                      .trim() ??
-                      '';
-
-              if (subCategory.isNotEmpty &&
-                  !subCategories.contains(
-                    subCategory,
-                  )) {
-                subCategories.add(
-                  subCategory,
-                );
-              }
-            }
-          }
-
-          subCategories.sort(
-                (a, b) => a
-                .toLowerCase()
-                .compareTo(
-              b.toLowerCase(),
-            ),
-          );
-
-          subCategoryMap[category] =
-              subCategories;
-        }
-      }
-
-      if (!mounted) {
-        return;
-      }
-
-      setState(() {
-        _apiCategoryList
-          ..clear()
-          ..addAll(categories);
-
-        _apiSubCategoryMap
-          ..clear()
-          ..addAll(subCategoryMap);
-
-        // If a refresh removes the selected category, clear filters.
-        if (_selectedCategory != null &&
-            !_apiCategoryList.contains(
-              _selectedCategory,
-            )) {
-          _selectedCategory = null;
-          _selectedSubCategory = null;
-        }
-
-        if (_selectedCategory != null &&
-            _selectedSubCategory != null) {
-          final List<String> validSubs =
-              _apiSubCategoryMap[
-              _selectedCategory] ??
-                  const <String>[];
-
-          if (!validSubs.contains(
-            _selectedSubCategory,
-          )) {
-            _selectedSubCategory = null;
-          }
-        }
-      });
-
-      debugPrint(
-        'CATEGORY COUNT => ${_apiCategoryList.length}',
-      );
-
-      debugPrint(
-        'CATEGORY MAP => $_apiSubCategoryMap',
-      );
-    } catch (e, stackTrace) {
-      debugPrint(
-        'CATEGORY API ERROR => $e',
-      );
-      debugPrint(
-        stackTrace.toString(),
-      );
-
-      // No blocking error:
-      // getters below automatically fall back to controller.products.
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isFilterMetaLoading = false;
-        });
-      }
-    }
-  }
 
   // ================================================================
   // SAFE VALUE READER
@@ -764,6 +538,21 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  // Only comparisons are normalized; the Oracle BUSINESS and SUB_CATEGORY
+  // values are preserved. Historic data sometimes spells Footwear as Footware.
+  static String _normalizeFilterValue(String value) {
+    final normalized = value.trim().toLowerCase()
+        .replaceAll('&', 'and')
+        .replaceAll(RegExp(r'\s+'), ' ');
+    if (normalized == 'footware') return 'footwear';
+    return normalized;
+  }
+
+  static bool _matchesFilter(String actual, String? selected) {
+    return selected == null || selected.isEmpty ||
+        _normalizeFilterValue(actual) == _normalizeFilterValue(selected);
+  }
+
   // ================================================================
   // FILTERED PRODUCTS
   // ================================================================
@@ -807,15 +596,10 @@ class _DashboardPageState extends State<DashboardPage> {
               organizationCode.toLowerCase().contains(search) ||
               status.toLowerCase().contains(search);
 
-      final bool matchesCategory =
-          _selectedCategory == null ||
-              _selectedCategory!.isEmpty ||
-              business == _selectedCategory;
-
+      // Category = master.business; Sub Category = master.sub_category.
+      final bool matchesCategory = _matchesFilter(business, _selectedCategory);
       final bool matchesSubCategory =
-          _selectedSubCategory == null ||
-              _selectedSubCategory!.isEmpty ||
-              subCategory == _selectedSubCategory;
+          _matchesFilter(subCategory, _selectedSubCategory);
 
       return matchesSearch &&
           matchesCategory &&
@@ -824,100 +608,10 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // ================================================================
-  // CATEGORY LIST
-  //
-  // API category = master BUSINESS
+  // CATEGORY + SUB CATEGORY: fixed, independent dropdown options.
   // ================================================================
-  List<String> get categoryList {
-    if (_apiCategoryList.isNotEmpty) {
-      return List<String>.from(
-        _apiCategoryList,
-      );
-    }
-
-    // Fallback if metadata API fails.
-    final List<String> list =
-    controller.products
-        .map(
-          (item) => _getValue(
-        item,
-        'business',
-      ),
-    )
-        .where(
-          (value) =>
-      value.trim().isNotEmpty,
-    )
-        .toSet()
-        .toList();
-
-    list.sort(
-          (a, b) => a
-          .toLowerCase()
-          .compareTo(
-        b.toLowerCase(),
-      ),
-    );
-
-    return list;
-  }
-
-  // ================================================================
-  // SELECTED CATEGORY-WISE SUB CATEGORY LIST
-  // ================================================================
-  List<String> get subCategoryList {
-    final String? category =
-        _selectedCategory;
-
-    if (category == null ||
-        category.trim().isEmpty) {
-      return const <String>[];
-    }
-
-    // First priority: updated GET API metadata.
-    final List<String>? apiList =
-    _apiSubCategoryMap[category];
-
-    if (apiList != null) {
-      return List<String>.from(
-        apiList,
-      );
-    }
-
-    // Fallback: derive from loaded products.
-    final List<String> list =
-    controller.products
-        .where(
-          (item) =>
-      _getValue(
-        item,
-        'business',
-      ) ==
-          category,
-    )
-        .map(
-          (item) => _getValue(
-        item,
-        'subCategory',
-      ),
-    )
-        .where(
-          (value) =>
-      value.trim().isNotEmpty,
-    )
-        .toSet()
-        .toList();
-
-    list.sort(
-          (a, b) => a
-          .toLowerCase()
-          .compareTo(
-        b.toLowerCase(),
-      ),
-    );
-
-    return list;
-  }
+  List<String> get categoryList => _categoryOptions;
+  List<String> get subCategoryList => _subCategoryOptions;
 
   // ================================================================
   // RESET FILTER
@@ -1018,13 +712,10 @@ class _DashboardPageState extends State<DashboardPage> {
       width: 220,
       child:
       DropdownButtonFormField<String>(
+        key: ValueKey<String>('top-category-${safeCategory ?? 'all'}'),
         value: safeCategory,
         isExpanded: true,
-        hint: Text(
-          _isFilterMetaLoading
-              ? 'Loading...'
-              : 'All Categories',
-        ),
+        hint: const Text('All Categories'),
         decoration: InputDecoration(
           labelText: 'Category',
           prefixIcon: const Icon(
@@ -1060,10 +751,7 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
         )
             .toList(),
-        onChanged:
-        _isFilterMetaLoading
-            ? null
-            : (value) {
+        onChanged: (value) {
           setState(() {
             _selectedCategory =
                 value;
@@ -1082,14 +770,11 @@ class _DashboardPageState extends State<DashboardPage> {
       width: 220,
       child:
       DropdownButtonFormField<String>(
+        key: ValueKey<String>('top-subcategory-${safeSubCategory ?? 'all'}'),
         value: safeSubCategory,
         isExpanded: true,
         hint: Text(
-          safeCategory == null
-              ? 'Select Category First'
-              : subCategories.isEmpty
-              ? 'No Sub Category'
-              : 'All Sub Categories',
+          'All Sub Categories',
         ),
         decoration: InputDecoration(
           labelText: 'Sub Category',
@@ -1126,9 +811,7 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
         )
             .toList(),
-        onChanged: safeCategory == null
-            ? null
-            : (value) {
+        onChanged: (value) {
           setState(() {
             _selectedSubCategory =
                 value;
@@ -2122,6 +1805,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
                     DropdownButtonFormField<
                         String>(
+                      key: ValueKey<String>('drawer-category-${safeCategory ?? 'all'}'),
                       value: safeCategory,
                       isExpanded: true,
                       hint: const Text(
@@ -2174,10 +1858,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
                       )
                           .toList(),
-                      onChanged:
-                      _isFilterMetaLoading
-                          ? null
-                          : (value) {
+                      onChanged: (value) {
                         setState(() {
                           _selectedCategory =
                               value;
@@ -2205,15 +1886,11 @@ class _DashboardPageState extends State<DashboardPage> {
 
                     DropdownButtonFormField<
                         String>(
-                      value:
-                      safeSubCategory,
+                      key: ValueKey<String>('drawer-subcategory-${safeSubCategory ?? 'all'}'),
+                      value: safeSubCategory,
                       isExpanded: true,
                       hint: Text(
-                        safeCategory == null
-                            ? 'Select Category First'
-                            : subCategories.isEmpty
-                            ? 'No Sub Category'
-                            : 'All Sub Categories',
+                        'All Sub Categories',
                       ),
                       decoration:
                       InputDecoration(
@@ -2262,10 +1939,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             ),
                       )
                           .toList(),
-                      onChanged:
-                      safeCategory == null
-                          ? null
-                          : (value) {
+                      onChanged: (value) {
                         setState(() {
                           _selectedSubCategory =
                               value;

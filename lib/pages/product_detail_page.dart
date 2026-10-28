@@ -27,6 +27,12 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   ProductModel get product => widget.product;
 
   late String _sizeRange = product.sizeRange.trim();
+  late double _moq = product.moq;
+
+  void _onMoqLoaded(double value) {
+    if (!mounted || value == _moq) return;
+    setState(() => _moq = value);
+  }
 
   void _onSizeRangeLoaded(String value) {
     final updated = value.trim();
@@ -118,6 +124,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                 child: _ProductImageGallery(
                   product: product,
                   onSizeRangeLoaded: _onSizeRangeLoaded,
+                  onMoqLoaded: _onMoqLoaded,
                   width: double.infinity,
                   height: double.infinity,
                   fit: BoxFit.contain,
@@ -207,6 +214,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
             child: _ProductImageGallery(
               product: product,
               onSizeRangeLoaded: _onSizeRangeLoaded,
+                  onMoqLoaded: _onMoqLoaded,
               width: double.infinity,
               height: imageHeight,
               fit: BoxFit.contain,
@@ -297,7 +305,9 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
             const SizedBox(width: 7),
             Expanded(
               child: Text(
-                'Item Code: ${product.itemCode}',
+                product.itemCode.trim().isEmpty
+                    ? 'Item Code: Not assigned'
+                    : 'Item Code: ${product.itemCode}',
                 style: const TextStyle(
                   fontSize: 14,
                   color: Color(0xFF757D8C),
@@ -404,7 +414,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               _InfoRow(
                 label: 'MOQ',
                 value:
-                '${_prettyNumber(product.quantity)} ${product.uom}',
+                _moq > 0 ? '${_prettyNumber(_moq)} ${product.uom}' : 'Not provided',
                 icon: Icons.inventory_2_outlined,
               ),
 
@@ -417,7 +427,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               _InfoRow(
                 label: 'Weight',
                 value: product.weight > 0
-                    ? '${_prettyNumber(product.weight)} kg'
+                    ? '${_prettyNumber(product.weight)} g'
                     : '',
                 icon: Icons.monitor_weight_outlined,
               ),
@@ -483,6 +493,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 class _ProductImageGallery extends StatefulWidget {
   final ProductModel product;
   final ValueChanged<String>? onSizeRangeLoaded;
+  final ValueChanged<double>? onMoqLoaded;
   final double width;
   final double height;
   final BoxFit fit;
@@ -491,6 +502,7 @@ class _ProductImageGallery extends StatefulWidget {
   const _ProductImageGallery({
     required this.product,
     this.onSizeRangeLoaded,
+    this.onMoqLoaded,
     required this.width,
     required this.height,
     required this.fit,
@@ -1060,10 +1072,11 @@ class _ProductImageGalleryState
     widget.product.itemCode
         .trim();
 
-    if (itemCode.isEmpty) {
-      debugPrint(
-        'IMAGE API SKIPPED => itemCode empty',
-      );
+    // Item Code is optional. For no-code products, load the product's
+    // master record instead of skipping the image / MOQ / Size Range API.
+    final int? masterId = _productMasterSl();
+    if (itemCode.isEmpty && masterId == null) {
+      debugPrint('IMAGE API SKIPPED => no itemCode or masterSl');
       return;
     }
 
@@ -1077,7 +1090,7 @@ class _ProductImageGalleryState
 
       final Map<String, String>
       queryParameters = {
-        'p_item_code': itemCode,
+        if (itemCode.isNotEmpty) 'p_item_code': itemCode,
         'p_limit': '100',
       };
 
@@ -1183,6 +1196,11 @@ class _ProductImageGalleryState
       if (mounted && fetchedSizeRange.isNotEmpty) {
         widget.onSizeRangeLoaded?.call(fetchedSizeRange);
       }
+      // Same detail GET also refreshes MOQ in the information panel.
+      final double? fetchedMoq = ProductModel.readMoq(selectedDetail);
+      if (mounted && fetchedMoq != null) {
+        widget.onMoqLoaded?.call(fetchedMoq);
+      }
 
       debugPrint(
         'MATCHED DETAIL SL => '
@@ -1264,27 +1282,42 @@ class _ProductImageGalleryState
           },
         );
 
-        for (final dynamic rawImage
-        in sortedImages) {
-          if (rawImage is! Map) {
-            continue;
-          }
-
-          _addImageUrl(
-            rawImage['image_url'] ??
-                rawImage['file_url'],
+        // Prefer full-resolution image URLs over thumbnail URLs, and retain
+        // the API's image_no order. Initial product-list URLs can be previews.
+        final preferred = <String>[];
+        for (final dynamic rawImage in sortedImages) {
+          if (rawImage is! Map) continue;
+          final fullResolutionUrl = _normalizeImageUrl(
+            rawImage['original_url'] ??
+                rawImage['full_image_url'] ??
+                rawImage['high_res_url'] ??
+                rawImage['image_url'] ??
+                rawImage['file_url'] ??
+                rawImage['file_name'],
           );
+          if (fullResolutionUrl.isNotEmpty &&
+              !preferred.contains(fullResolutionUrl)) {
+            preferred.add(fullResolutionUrl);
+          }
+        }
+        if (preferred.isNotEmpty) {
+          _imageUrls
+            ..clear()
+            ..addAll(preferred);
+          _uniqueUrls
+            ..clear()
+            ..addAll(preferred);
+          _currentIndex = 0;
+          if (_pageController.hasClients) {
+            _pageController.jumpToPage(0);
+          }
         }
       }
 
-      // Fallback first image fields.
-      _addImageUrl(
-        selectedDetail['image_url'],
-      );
-
-      _addImageUrl(
-        selectedDetail['file_url'],
-      );
+      // Fallback first-image fields only when no details.images[] URL exists.
+      if (_imageUrls.isEmpty) {
+        _addImageUrl(selectedDetail['image_url'] ?? selectedDetail['file_url']);
+      }
 
       final int addedCount =
           _imageUrls.length -
@@ -1409,6 +1442,11 @@ class _ProductImageGalleryState
             sizeRangeFromMaster.isNotEmpty) {
           detail['size_range'] = sizeRangeFromMaster;
         }
+        // Support APIs that expose MOQ on the master rather than detail.
+        if (ProductModel.readMoq(detail) == null) {
+          final masterMoq = ProductModel.readMoq(master);
+          if (masterMoq != null) detail['moq'] = masterMoq;
+        }
 
         result.add(detail);
       }
@@ -1483,10 +1521,9 @@ class _ProductImageGalleryState
                 .trim() ??
                 '';
 
-        if (rowMasterSl ==
-            masterSl &&
-            rowItemCode ==
-                itemCode) {
+        if (itemCode.isNotEmpty &&
+            rowMasterSl == masterSl &&
+            rowItemCode == itemCode) {
           return detail;
         }
       }
@@ -1515,17 +1552,18 @@ class _ProductImageGalleryState
     // ------------------------------------------------------------------------
     // 4. ITEM CODE fallback
     // ------------------------------------------------------------------------
-    for (final detail in details) {
-      final String rowItemCode =
-          detail['item_code']
-              ?.toString()
-              .trim() ??
-              '';
-
-      if (rowItemCode ==
-          itemCode) {
-        return detail;
+    if (itemCode.isNotEmpty) {
+      for (final detail in details) {
+        final String rowItemCode =
+            detail['item_code']?.toString().trim() ?? '';
+        if (rowItemCode == itemCode) return detail;
       }
+    } else if (masterSl != null) {
+      // Only fall back by master when it identifies exactly one detail.
+      // Otherwise rely on FILE_URL above, never arbitrarily pick a product.
+      final matching = details.where((detail) =>
+          _toInt(detail['m_sl'] ?? detail['_master_sl']) == masterSl).toList();
+      if (matching.length == 1) return matching.single;
     }
 
     return null;
@@ -1553,75 +1591,64 @@ class _ProductImageGalleryState
   // FULL SCREEN PREVIEW
   // ==========================================================================
 
-  void _openFullScreenPreview(
-      BuildContext context,
-      String imageUrl,
-      ) {
-    showDialog(
+  void _openFullScreenPreview(BuildContext context, String imageUrl) {
+    showDialog<void>(
       context: context,
-      barrierColor:
-      Colors.black.withOpacity(0.92),
-      builder: (
-          dialogContext,
-          ) {
+      barrierColor: Colors.black.withOpacity(0.96),
+      builder: (dialogContext) {
+        final size = MediaQuery.sizeOf(dialogContext);
         return Dialog(
-          backgroundColor:
-          Colors.transparent,
-          insetPadding:
-          const EdgeInsets.all(16),
-          child: Stack(
-            children: [
+          insetPadding: EdgeInsets.zero,
+          backgroundColor: Colors.black,
+          child: SizedBox(
+            width: size.width,
+            height: size.height,
+            child: Stack(children: [
               Positioned.fill(
                 child: InteractiveViewer(
-                  minScale: 0.7,
-                  maxScale: 5,
-                  child: Center(
+                  minScale: 0.8,
+                  maxScale: 8.0,
+                  // The image canvas fills the viewport; without explicit
+                  // dimensions small source images stayed thumbnail-sized.
+                  child: SizedBox(
+                    width: size.width,
+                    height: size.height,
                     child: Image.network(
                       imageUrl,
+                      width: size.width,
+                      height: size.height,
                       fit: BoxFit.contain,
-                      errorBuilder: (
-                          context,
-                          error,
-                          stackTrace,
-                          ) {
-                        return const Center(
-                          child: Icon(
-                            Icons
-                                .broken_image_outlined,
-                            size: 80,
-                            color:
-                            Colors.white70,
-                          ),
-                        );
-                      },
+                      filterQuality: FilterQuality.high,
+                      loadingBuilder: (context, child, progress) =>
+                          progress == null
+                              ? child
+                              : const Center(child: CircularProgressIndicator()),
+                      errorBuilder: (_, __, ___) => const Center(
+                        child: Icon(Icons.broken_image_outlined,
+                            color: Colors.white70, size: 64),
+                      ),
                     ),
                   ),
                 ),
               ),
-
+              const Positioned(
+                left: 18,
+                bottom: 20,
+                child: Text('Pinch or scroll to zoom',
+                    style: TextStyle(color: Colors.white70, fontSize: 13)),
+              ),
               Positioned(
-                top: 8,
-                right: 8,
-                child: Material(
-                  color:
-                  Colors.black54,
-                  shape:
-                  const CircleBorder(),
-                  child: IconButton(
-                    onPressed: () {
-                      Navigator.of(
-                        dialogContext,
-                      ).pop();
-                    },
-                    icon: const Icon(
-                      Icons.close_rounded,
-                      color:
-                      Colors.white,
-                    ),
+                top: 16,
+                right: 16,
+                child: SafeArea(
+                  child: IconButton.filled(
+                    tooltip: 'Close image',
+                    onPressed: () => Navigator.of(dialogContext).pop(),
+                    icon: const Icon(Icons.close),
                   ),
                 ),
               ),
-            ],
+            ]),
           ),
         );
       },
@@ -1654,6 +1681,7 @@ class _ProductImageGalleryState
           height:
           double.infinity,
           fit: widget.fit,
+          filterQuality: FilterQuality.high,
           loadingBuilder: (
               context,
               child,
@@ -2031,6 +2059,7 @@ class _ProductImageGalleryState
           child: Image.network(
             url,
             fit: BoxFit.cover,
+            filterQuality: FilterQuality.high,
             errorBuilder: (
                 context,
                 error,

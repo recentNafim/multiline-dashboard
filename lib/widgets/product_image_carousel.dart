@@ -57,7 +57,8 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
             itemBuilder: (context, index) => Image.network(
               urls[index],
               width: double.infinity,
-              fit: BoxFit.cover,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.high,
               errorBuilder: (_, __, ___) => const Center(
                 child: Icon(Icons.broken_image_outlined),
               ),
