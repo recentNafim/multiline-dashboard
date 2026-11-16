@@ -28,6 +28,13 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 
   late String _sizeRange = product.sizeRange.trim();
   late double _moq = product.moq;
+  late String _buyer = product.buyer.trim();
+
+  void _onBuyerLoaded(String value) {
+    final updated = value.trim();
+    if (!mounted || updated.isEmpty || updated == _buyer) return;
+    setState(() => _buyer = updated);
+  }
 
   void _onMoqLoaded(double value) {
     if (!mounted || value == _moq) return;
@@ -125,6 +132,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                   product: product,
                   onSizeRangeLoaded: _onSizeRangeLoaded,
                   onMoqLoaded: _onMoqLoaded,
+                  onBuyerLoaded: _onBuyerLoaded,
                   width: double.infinity,
                   height: double.infinity,
                   fit: BoxFit.contain,
@@ -214,7 +222,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
             child: _ProductImageGallery(
               product: product,
               onSizeRangeLoaded: _onSizeRangeLoaded,
-                  onMoqLoaded: _onMoqLoaded,
+              onMoqLoaded: _onMoqLoaded,
+              onBuyerLoaded: _onBuyerLoaded,
               width: double.infinity,
               height: imageHeight,
               fit: BoxFit.contain,
@@ -404,6 +413,12 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               ),
 
               _InfoRow(
+                label: 'Client Name',
+                value: _buyer.isNotEmpty ? _buyer : 'Not provided',
+                icon: Icons.person_outline_rounded,
+              ),
+
+              _InfoRow(
                 label: 'Sub Category',
                 value: product.subCategory,
                 icon: Icons.category_outlined,
@@ -492,6 +507,7 @@ class _ProductImageGallery extends StatefulWidget {
   final ProductModel product;
   final ValueChanged<String>? onSizeRangeLoaded;
   final ValueChanged<double>? onMoqLoaded;
+  final ValueChanged<String>? onBuyerLoaded;
   final double width;
   final double height;
   final BoxFit fit;
@@ -501,6 +517,7 @@ class _ProductImageGallery extends StatefulWidget {
     required this.product,
     this.onSizeRangeLoaded,
     this.onMoqLoaded,
+    this.onBuyerLoaded,
     required this.width,
     required this.height,
     required this.fit,
@@ -1197,6 +1214,11 @@ class _ProductImageGalleryState
       final double? fetchedMoq = ProductModel.readMoq(selectedDetail);
       if (mounted && fetchedMoq != null) {
         widget.onMoqLoaded?.call(fetchedMoq);
+      }
+      // Display the actual Buyer for this detail; no hardcoded client name.
+      final String fetchedBuyer = ProductModel.readBuyer(selectedDetail);
+      if (mounted && fetchedBuyer.isNotEmpty) {
+        widget.onBuyerLoaded?.call(fetchedBuyer);
       }
 
       debugPrint(

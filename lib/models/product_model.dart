@@ -5,6 +5,7 @@ class ProductModel {
   final int organizationId;
   final String displayRoomNo;
   final String displayRoomName;
+  final String buyer;
   final String status;
   final String assignee;
 
@@ -32,6 +33,7 @@ class ProductModel {
     required this.organizationId,
     required this.displayRoomNo,
     required this.displayRoomName,
+    this.buyer = '',
     required this.status,
     required this.assignee,
     required this.itemCode,
@@ -75,6 +77,7 @@ class ProductModel {
           _toInt(detail['organization_id'] ?? master['organization_id']),
       displayRoomNo: _toString(master['display_room_no']),
       displayRoomName: _toString(master['display_room_name']),
+      buyer: readBuyer(detail, master: master),
       status: _toString(master['status']),
       assignee: _toString(master['assignee']),
       itemCode: _toString(detail['item_code']),
@@ -95,6 +98,28 @@ class ProductModel {
       fileName: _toString(detail['file_name']),
       mimeType: _toString(detail['mime_type']),
     );
+  }
+
+  /// Buyer (client name) belongs to each product detail in the ORDS GET API.
+  /// Support alternate JSON casing without changing other product fields.
+  static String readBuyer(
+    Map<String, dynamic> detail, {
+    Map<String, dynamic>? master,
+  }) {
+    String find(Map<String, dynamic> source) {
+      for (final entry in source.entries) {
+        final key = entry.key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+        if (const {'buyer', 'buyername', 'clientname'}.contains(key)) {
+          final value = entry.value?.toString().trim() ?? '';
+          if (value.isNotEmpty && value.toLowerCase() != 'null') return value;
+        }
+      }
+      return '';
+    }
+
+    final fromDetail = find(detail);
+    if (fromDetail.isNotEmpty) return fromDetail;
+    return master == null ? '' : find(master);
   }
 
   /// Read Size Range from the same Oracle detail used by the report.
