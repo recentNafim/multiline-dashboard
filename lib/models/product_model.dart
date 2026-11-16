@@ -21,6 +21,7 @@ class ProductModel {
   final String materialSpecification;
   final double cbm;
   final double weight;
+  final String weightText;
   final double fob;
   final String fileUrl;
   final String fileName;
@@ -48,6 +49,7 @@ class ProductModel {
     required this.materialSpecification,
     required this.cbm,
     required this.weight,
+    this.weightText = '',
     this.fob = 0,
     required this.fileUrl,
     required this.fileName,
@@ -93,6 +95,7 @@ class ProductModel {
           _toString(detail['material_specification']),
       cbm: _toDouble(detail['cbm']),
       weight: _toDouble(detail['weight']),
+      weightText: _toString(detail['weight_text']),
       fob: _toDouble(detail['fob']),
       fileUrl: _toString(detail['file_url']),
       fileName: _toString(detail['file_name']),

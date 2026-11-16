@@ -439,9 +439,11 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 
               _InfoRow(
                 label: 'Weight',
-                value: product.weight > 0
-                    ? '${_prettyNumber(product.weight)} kg'
-                    : '',
+                value: product.weightText.trim().isNotEmpty
+                    ? product.weightText
+                    : (product.weight > 0
+                        ? '${_prettyNumber(product.weight)} kg'
+                        : 'Not provided'),
                 icon: Icons.monitor_weight_outlined,
               ),
 

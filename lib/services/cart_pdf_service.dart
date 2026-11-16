@@ -322,7 +322,7 @@ class CartPdfService {
           _specRow('ITEM CODE', p.itemCode, 'BUSINESS', p.business),
           _specRow('CATEGORY', p.productCategory, 'SUB CATEGORY', p.subCategory),
           _specRow('UOM', p.uom, 'WEIGHT',
-              p.weight > 0 ? '${_fmt(p.weight)} g' : '-'),
+              p.weightText.trim().isNotEmpty ? p.weightText : (p.weight > 0 ? '${_fmt(p.weight)} g' : '-')),
           _specRow('FOB', p.fob > 0 ? _fmt(p.fob) : '-',
               'CBM', p.cbm > 0 ? '${_fmt(p.cbm)} CBM' : '-'),
           _specRow('MATERIAL', p.materialSpecification,

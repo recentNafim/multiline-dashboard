@@ -52,6 +52,7 @@ class CartPresentationService {
         'moq': p.moq,
         'fob': p.fob,
         'weight': p.weight,
+        'weightText': p.weightText,
         'cbm': p.cbm,
         'material': p.materialSpecification,
         'subInventory': p.subInventoryCode,
