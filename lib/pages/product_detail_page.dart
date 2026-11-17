@@ -304,21 +304,24 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         // CATEGORY
         // =====================================================
         if (product.productCategory.trim().isNotEmpty)
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 13,
-              vertical: 7,
-            ),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEAF0FF),
+          Tooltip(
+            message: 'Tap to copy product category',
+            child: InkWell(
               borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              product.productCategory,
-              style: const TextStyle(
-                color: Color(0xFF315DC8),
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+              onTap: () => _copyProductField(product.productCategory, 'Product category'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEAF0FF),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(product.productCategory,
+                  style: const TextStyle(
+                    color: Color(0xFF315DC8),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           ),
@@ -460,24 +463,28 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           child: Column(
             children: [
               _InfoRow(
+                onCopy: _copyProductField,
                 label: 'Business',
                 value: product.business,
                 icon: Icons.business_outlined,
               ),
 
               _InfoRow(
+                onCopy: _copyProductField,
                 label: 'Client Name',
                 value: _buyer.isNotEmpty ? _buyer : 'Not provided',
                 icon: Icons.person_outline_rounded,
               ),
 
               _InfoRow(
+                onCopy: _copyProductField,
                 label: 'Sub Category',
                 value: product.subCategory,
                 icon: Icons.category_outlined,
               ),
 
               _InfoRow(
+                onCopy: _copyProductField,
                 label: 'MOQ',
                 value:
                 _moq > 0 ? '${_prettyNumber(_moq)} ${product.uom}' : 'Not provided',
@@ -485,18 +492,21 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               ),
 
               _InfoRow(
+                onCopy: _copyProductField,
                 label: 'UOM',
                 value: product.uom,
                 icon: Icons.straighten_outlined,
               ),
 
               _InfoRow(
+                onCopy: _copyProductField,
                 label: 'Weight',
                 value: _weightDisplay,
                 icon: Icons.monitor_weight_outlined,
               ),
 
               _InfoRow(
+                onCopy: _copyProductField,
                 label: 'CBM',
                 value: product.cbm > 0
                     ? _prettyNumber(product.cbm)
@@ -505,6 +515,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               ),
 
               _InfoRow(
+                onCopy: _copyProductField,
                 label: 'Sub Inventory',
                 value: product.subInventoryCode,
                 icon: Icons.warehouse_outlined,
@@ -513,18 +524,21 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               // Keep the row visible while the detail API is loading or
               // if an old database row does not contain SIZE_RANGE yet.
               _InfoRow(
+                onCopy: _copyProductField,
                 label: 'Size Range',
                 value: _sizeRange.isNotEmpty ? _sizeRange : 'Not provided',
                 icon: Icons.straighten_outlined,
               ),
 
               _InfoRow(
+                onCopy: _copyProductField,
                 label: 'Display Room',
                 value: product.displayRoomName,
                 icon: Icons.meeting_room_outlined,
               ),
 
               _InfoRow(
+                onCopy: _copyProductField,
                 label: 'Material',
                 value: product.materialSpecification,
                 icon: Icons.description_outlined,
@@ -2587,11 +2601,13 @@ class _InfoRow extends StatelessWidget {
   final String value;
   final IconData icon;
   final bool showDivider;
+  final Future<void> Function(String value, String label) onCopy;
 
   const _InfoRow({
     required this.label,
     required this.value,
     required this.icon,
+    required this.onCopy,
     this.showDivider = true,
   });
 
@@ -2605,13 +2621,14 @@ class _InfoRow extends StatelessWidget {
 
     return Column(
       children: [
-        Padding(
-          padding:
-          const EdgeInsets
-              .symmetric(
-            vertical: 14,
-          ),
-          child: LayoutBuilder(
+        Tooltip(
+          message: 'Tap to copy $label',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => onCopy(value, label),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: LayoutBuilder(
             builder: (
                 context,
                 constraints,
@@ -2661,14 +2678,14 @@ class _InfoRow extends StatelessWidget {
                           .only(
                         left: 26,
                       ),
-                      child: Text(
-                        value,
-                        style:
-                        const TextStyle(
-                          fontWeight:
-                          FontWeight
-                              .w700,
-                        ),
+                      child: Row(
+                        children: [
+                          Flexible(child: Text(value,
+                            style: const TextStyle(fontWeight: FontWeight.w700))),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.copy_outlined, size: 15,
+                            color: Color(0xFF8A92A2)),
+                        ],
                       ),
                     ),
                   ],
@@ -2714,27 +2731,29 @@ class _InfoRow extends StatelessWidget {
                   ),
 
                   Expanded(
-                    child: Text(
-                      value,
-                      textAlign:
-                      TextAlign.right,
-                      style:
-                      const TextStyle(
-                        color:
-                        Color(
-                          0xFF202329,
-                        ),
-                        fontSize:
-                        14,
-                        fontWeight:
-                        FontWeight
-                            .w700,
-                      ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Flexible(child: Text(
+                          value,
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            color: Color(0xFF202329),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        )),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.copy_outlined, size: 15,
+                            color: Color(0xFF8A92A2)),
+                      ],
                     ),
                   ),
                 ],
               );
             },
+              ),
+            ),
           ),
         ),
 
