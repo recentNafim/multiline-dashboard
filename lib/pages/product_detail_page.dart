@@ -3,6 +3,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:model_viewer_plus/model_viewer_plus.dart';
@@ -45,6 +46,31 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     final updated = value.trim();
     if (!mounted || updated.isEmpty || updated == _sizeRange) return;
     setState(() => _sizeRange = updated);
+  }
+
+  // Copy the plain field value (without its label) and confirm the action.
+  Future<void> _copyProductField(String value, String fieldName) async {
+    final text = value.trim();
+    if (text.isEmpty) return;
+
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('$fieldName copied to clipboard'),
+          duration: const Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to copy. Please try again.')),
+      );
+    }
   }
 
   @override
@@ -256,6 +282,10 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       CartController cartController, {
         required bool isDesktop,
       }) {
+    final productTitle = product.description.trim().isEmpty
+        ? product.itemCode
+        : product.description;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -287,15 +317,20 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         // =====================================================
         // PRODUCT NAME
         // =====================================================
-        Text(
-          product.description.trim().isEmpty
-              ? product.itemCode
-              : product.description,
-          style: TextStyle(
-            fontSize: isDesktop ? 30 : 23,
-            fontWeight: FontWeight.w800,
-            height: 1.25,
-            color: const Color(0xFF1B1D22),
+        Tooltip(
+          message: 'Tap to copy product title',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: () => _copyProductField(productTitle, 'Product title'),
+            child: Text(
+              productTitle,
+              style: TextStyle(
+                fontSize: isDesktop ? 30 : 23,
+                fontWeight: FontWeight.w800,
+                height: 1.25,
+                color: const Color(0xFF1B1D22),
+              ),
+            ),
           ),
         ),
 
@@ -304,24 +339,31 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         // =====================================================
         // ITEM CODE
         // =====================================================
-        Row(
-          children: [
-            const Icon(
-              Icons.qr_code_2_rounded,
-              size: 19,
-              color: Color(0xFF757D8C),
-            ),
-            const SizedBox(width: 7),
-            Expanded(
-              child: Text(
-                'Item Code: ${product.itemCode}',
-                style: const TextStyle(
-                  fontSize: 14,
+        Tooltip(
+          message: 'Tap to copy item code',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(6),
+            onTap: () => _copyProductField(product.itemCode, 'Item code'),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.qr_code_2_rounded,
+                  size: 19,
                   color: Color(0xFF757D8C),
                 ),
-              ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    'Item Code: ${product.itemCode}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF757D8C),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
 
         const SizedBox(height: 20),
