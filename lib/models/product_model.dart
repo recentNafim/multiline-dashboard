@@ -103,6 +103,28 @@ class ProductModel {
     );
   }
 
+  /// Display the free-form weight exactly as the uploader saved it.
+  /// The legacy NUMBER column is stored in grams, not kilograms.
+  static String formatWeight(String? text, double legacyGrams) {
+    final entered = text?.trim() ?? '';
+    if (entered.isNotEmpty && entered.toLowerCase() != 'null') return entered;
+    if (!legacyGrams.isFinite || legacyGrams <= 0) return 'Not provided';
+    final grams = legacyGrams == legacyGrams.roundToDouble()
+        ? legacyGrams.toStringAsFixed(0)
+        : legacyGrams.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '').replaceFirst(RegExp(r'\.$'), '');
+    return '$grams g';
+  }
+
+  /// Uses the fresh selected-detail GET result, not a stale dashboard model.
+  static String readWeightDisplay(Map<String, dynamic> detail) {
+    final rawText = detail['weight_text'] ?? detail['WEIGHT_TEXT'];
+    final rawNumber = detail['weight'] ?? detail['WEIGHT'];
+    final number = rawNumber is num
+        ? rawNumber.toDouble()
+        : double.tryParse(rawNumber?.toString() ?? '') ?? 0;
+    return formatWeight(rawText?.toString(), number);
+  }
+
   /// Buyer (client name) belongs to each product detail in the ORDS GET API.
   /// Support alternate JSON casing without changing other product fields.
   static String readBuyer(

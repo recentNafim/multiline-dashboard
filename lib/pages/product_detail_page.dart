@@ -30,6 +30,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   late String _sizeRange = product.sizeRange.trim();
   late double _moq = product.moq;
   late String _buyer = product.buyer.trim();
+  late String _weightDisplay = ProductModel.formatWeight(
+    product.weightText, product.weight,
+  );
+
+  void _onWeightLoaded(String value) {
+    if (!mounted || value == _weightDisplay) return;
+    setState(() => _weightDisplay = value);
+  }
+
 
   void _onBuyerLoaded(String value) {
     final updated = value.trim();
@@ -44,7 +53,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 
   void _onSizeRangeLoaded(String value) {
     final updated = value.trim();
-    if (!mounted || updated.isEmpty || updated == _sizeRange) return;
+    if (!mounted || updated == _sizeRange) return;
     setState(() => _sizeRange = updated);
   }
 
@@ -159,6 +168,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                   onSizeRangeLoaded: _onSizeRangeLoaded,
                   onMoqLoaded: _onMoqLoaded,
                   onBuyerLoaded: _onBuyerLoaded,
+              onWeightLoaded: _onWeightLoaded,
                   width: double.infinity,
                   height: double.infinity,
                   fit: BoxFit.contain,
@@ -250,6 +260,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               onSizeRangeLoaded: _onSizeRangeLoaded,
               onMoqLoaded: _onMoqLoaded,
               onBuyerLoaded: _onBuyerLoaded,
+              onWeightLoaded: _onWeightLoaded,
               width: double.infinity,
               height: imageHeight,
               fit: BoxFit.contain,
@@ -481,11 +492,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 
               _InfoRow(
                 label: 'Weight',
-                value: product.weightText.trim().isNotEmpty
-                    ? product.weightText
-                    : (product.weight > 0
-                        ? '${_prettyNumber(product.weight)} kg'
-                        : 'Not provided'),
+                value: _weightDisplay,
                 icon: Icons.monitor_weight_outlined,
               ),
 
@@ -552,6 +559,7 @@ class _ProductImageGallery extends StatefulWidget {
   final ValueChanged<String>? onSizeRangeLoaded;
   final ValueChanged<double>? onMoqLoaded;
   final ValueChanged<String>? onBuyerLoaded;
+  final ValueChanged<String>? onWeightLoaded;
   final double width;
   final double height;
   final BoxFit fit;
@@ -562,6 +570,7 @@ class _ProductImageGallery extends StatefulWidget {
     this.onSizeRangeLoaded,
     this.onMoqLoaded,
     this.onBuyerLoaded,
+    this.onWeightLoaded,
     required this.width,
     required this.height,
     required this.fit,
@@ -1251,8 +1260,11 @@ class _ProductImageGalleryState
       final String fetchedSizeRange = ProductModel.readSizeRange(
         selectedDetail,
       );
-      if (mounted && fetchedSizeRange.isNotEmpty) {
+      if (mounted) {
         widget.onSizeRangeLoaded?.call(fetchedSizeRange);
+        widget.onWeightLoaded?.call(
+          ProductModel.readWeightDisplay(selectedDetail),
+        );
       }
       // Same detail GET also refreshes MOQ in the information panel.
       final double? fetchedMoq = ProductModel.readMoq(selectedDetail);
