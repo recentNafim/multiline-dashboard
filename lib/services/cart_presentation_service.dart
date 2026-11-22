@@ -45,6 +45,7 @@ class CartPresentationService {
         'description': p.description,
         'itemName': p.description,
         'business': p.business,
+        'buyer': p.buyer,
         'category': p.productCategory,
         'subCategory': p.subCategory,
         'uom': p.uom,

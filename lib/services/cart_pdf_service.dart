@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -6,6 +7,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../models/cart_item.dart';
+import 'catalogue_logo_data.dart';
 
 /// Premium Display Room lookbook.
 ///
@@ -52,9 +54,11 @@ class CartPdfService {
 
     final generated = DateTime.now().toLocal();
     final dateLabel = '${_two(generated.day)}.${_two(generated.month)}.${generated.year}';
-    final totalUnits = items.fold<int>(0, (sum, row) => sum + row.quantity);
+    // The supplied company logo is bundled in source to avoid changing
+    // pubspec.yaml or requiring a network request during PDF export.
+    final logo = pw.MemoryImage(base64Decode(mlilCompanyLogoBase64));
 
-    doc.addPage(_coverPage(items, galleries, totalUnits, dateLabel));
+    doc.addPage(_coverPage(items, galleries, dateLabel, logo));
 
     // Multiple selection pages prevent overflowing A4 for a large cart.
     const perIndexPage = 12;
@@ -97,8 +101,8 @@ class CartPdfService {
   static pw.Page _coverPage(
     List<CartItem> items,
     List<List<pw.MemoryImage?>> galleries,
-    int totalUnits,
     String dateLabel,
+    pw.MemoryImage logo,
   ) {
     final firstImage = galleries.isNotEmpty && galleries.first.isNotEmpty
         ? galleries.first.first
@@ -131,6 +135,23 @@ class CartPdfService {
             child: _text('THE PRODUCT EDIT / AUTOMATED CATALOGUE',
                 9, PdfColors.white, bold: true),
           ),
+          // White logo card in the marked top-right cover area.
+          // The original multicolour company logo keeps its aspect ratio.
+          pw.Positioned(
+            left: 342, top: 56,
+            child: pw.Container(
+              width: 204,
+              height: 78,
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.white,
+                borderRadius: pw.BorderRadius.circular(6),
+              ),
+              alignment: pw.Alignment.center,
+              child: pw.Image(logo, width: 183, height: 58,
+                  fit: pw.BoxFit.contain),
+            ),
+          ),
           pw.Positioned(
             left: 44, top: 147,
             child: pw.Column(
@@ -155,8 +176,6 @@ class CartPdfService {
             left: 44, top: 425,
             child: pw.Row(children: [
               _pill('${items.length} PRODUCTS', _mint, _ink),
-              pw.SizedBox(width: 10),
-              _pill('$totalUnits SELECTED UNITS', _coral, PdfColors.white),
             ]),
           ),
           pw.Positioned(
@@ -309,7 +328,6 @@ class CartPdfService {
                       16, PdfColors.white, bold: true, maxLines: 1),
                 ],
               )),
-              _pill('CART ${item.quantity}', _coral, PdfColors.white),
             ]),
           ),
           pw.SizedBox(height: 10),
@@ -351,7 +369,7 @@ class CartPdfService {
               'SUB INVENTORY', p.subInventoryCode),
           _specRow('ORGANIZATION ID', '${p.organizationId}',
               'DISPLAY ROOM', p.displayRoomName),
-          _specRow('STATUS', p.status, 'CART QUANTITY', '${item.quantity}'),
+          _specRow('STATUS', p.status, 'BUYER / CLIENT', p.buyer),
           pw.Spacer(),
           _footer('AVAILABLE PHOTOS ${photos.where((p) => p != null).length}',
               'DISPLAY ROOM / PRODUCT LOOKBOOK', pageNumber),
