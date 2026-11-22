@@ -90,7 +90,7 @@ class CartPdfService {
       ));
     }
 
-    doc.addPage(_thankYouPage(items.length, totalUnits, dateLabel));
+    doc.addPage(_thankYouPage());
     return doc.save();
   }
 
@@ -196,20 +196,19 @@ class CartPdfService {
           pw.SizedBox(height: 20),
           _text('Products at a glance', 29, _ink, bold: true),
           pw.SizedBox(height: 8),
-          _text('MOQ = minimum order quantity  |  Qty = selected cart quantity',
-              9.5, _muted),
+          _text('MOQ = minimum order quantity', 9.5, _muted),
           pw.SizedBox(height: 21),
           _indexRow(
-            '#', 'PRODUCT', 'SIZE', 'MOQ', 'QTY', header: true,
+            '#', 'PRODUCT', 'SUB CATEGORY', 'SIZE', 'MOQ', header: true,
           ),
           ...rows.asMap().entries.map((e) {
             final p = e.value.product;
             return _indexRow(
               '${offset + e.key + 1}',
               _productName(p.description, p.itemCode),
+              _value(p.subCategory),
               _value(p.sizeRange),
               '${_fmt(p.moq)} ${p.uom}'.trim(),
-              '${e.value.quantity}',
               alternate: e.key.isOdd,
             );
           }),
@@ -225,28 +224,51 @@ class CartPdfService {
   static pw.Widget _indexRow(
     String no,
     String product,
+    String subCategory,
     String size,
-    String moq,
-    String qty, {
+    String moq, {
     bool header = false,
     bool alternate = false,
   }) {
     final fg = header ? PdfColors.white : _ink;
     return pw.Container(
-      height: header ? 33 : 40,
+      height: header ? 33 : 44,
       padding: const pw.EdgeInsets.symmetric(horizontal: 11),
       color: header ? _ink : (alternate ? _paper : PdfColors.white),
       child: pw.Row(
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
           pw.SizedBox(width: 31, child: _text(no, 9, fg, bold: header)),
-          pw.Expanded(flex: 7,
-              child: _text(product, 9, fg, bold: header, maxLines: 1)),
-          pw.Expanded(flex: 2,
-              child: _text(size, 9, fg, bold: header, maxLines: 1)),
-          pw.Expanded(flex: 3,
-              child: _text(moq, 9, fg, bold: header, maxLines: 1)),
-          pw.SizedBox(width: 34, child: _text(qty, 9, fg, bold: header)),
+          // Flexible but bounded columns prevent long product names from
+          // overlapping the new Sub Category, Size, or MOQ cells.
+          pw.Expanded(
+            flex: 10,
+            child: pw.Padding(
+              padding: const pw.EdgeInsets.only(right: 7),
+              child: _text(product, 9, fg,
+                  bold: header, maxLines: header ? 1 : 2),
+            ),
+          ),
+          pw.Expanded(
+            flex: 3,
+            child: pw.Padding(
+              padding: const pw.EdgeInsets.only(right: 6),
+              child: _text(subCategory, header ? 8 : 9, fg,
+                  bold: header, maxLines: 2),
+            ),
+          ),
+          pw.Expanded(
+            flex: 3,
+            child: pw.Padding(
+              padding: const pw.EdgeInsets.only(right: 6),
+              child: _text(size, 9, fg,
+                  bold: header, maxLines: 2),
+            ),
+          ),
+          pw.Expanded(
+            flex: 3,
+            child: _text(moq, 9, fg, bold: header, maxLines: 2),
+          ),
         ],
       ),
     );
@@ -387,46 +409,17 @@ class CartPdfService {
     );
   }
 
-  static pw.Page _thankYouPage(
-      int products, int totalUnits, String dateLabel) {
+  // The closing page intentionally contains only a centered thank-you message.
+  static pw.Page _thankYouPage() {
     return pw.Page(
       pageFormat: PdfPageFormat.a4,
       margin: pw.EdgeInsets.zero,
-      build: (_) => pw.SizedBox(
+      build: (_) => pw.Container(
         width: _pageWidth,
         height: _pageHeight,
-        child: pw.Stack(children: [
-        pw.Positioned(left: 0, top: 0,
-            child: pw.SizedBox(width: _pageWidth, height: _pageHeight,
-                child: pw.Container(color: _ink))),
-        pw.Positioned(left: 0, top: 0,
-            child: pw.SizedBox(width: _pageWidth, height: 9,
-                child: pw.Container(color: _coral))),
-        pw.Positioned(left: 58, top: 100,
-            child: _text('DISPLAY ROOM / PRODUCT LOOKBOOK',
-                9, _mint, bold: true)),
-        pw.Positioned(
-          left: 58, top: 328,
-          child: pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              _text('THANK YOU', 55, PdfColors.white, bold: true),
-              pw.SizedBox(height: 17),
-              _text('Your selected products, all in one place.',
-                  15, PdfColors.white),
-              pw.SizedBox(height: 55),
-              pw.Row(children: [
-                _pill('$products PRODUCTS', _mint, _ink),
-                pw.SizedBox(width: 10),
-                _pill('$totalUnits SELECTED UNITS', _coral, PdfColors.white),
-              ]),
-            ],
-          ),
-        ),
-        pw.Positioned(left: 58, top: 792,
-            child: _text('GENERATED $dateLabel', 9, PdfColors.white,
-                bold: true)),
-        ]),
+        color: _ink,
+        alignment: pw.Alignment.center,
+        child: _text('Thank You', 55, PdfColors.white, bold: true),
       ),
     );
   }
@@ -505,18 +498,29 @@ class CartPdfService {
   }
 
   static pw.Widget _footer(String left, String right, int pageNumber) {
+    // The catalogue name is the single, persistent footer caption on each
+    // content page. Discard any repeated copies supplied by older callers.
+    const catalogueName = 'DISPLAY ROOM / PRODUCT LOOKBOOK';
+    final leftLabel = left.trim() == catalogueName ? '' : left.trim();
+    final rightLabel = right.trim() == catalogueName ? '' : right.trim();
+    final hasExtraLabels = leftLabel.isNotEmpty || rightLabel.isNotEmpty;
+
     return pw.Column(children: [
       pw.Container(height: 0.7, color: _line),
       pw.SizedBox(height: 8),
+      if (hasExtraLabels) ...[
+        pw.Row(children: [
+          pw.Expanded(child: _text(leftLabel, 7.5, _muted, bold: true)),
+          if (rightLabel.isNotEmpty)
+            _text(rightLabel, 7.5, PdfColor.fromInt(0xFF208778),
+                bold: true),
+        ]),
+        pw.SizedBox(height: 9),
+      ],
       pw.Row(children: [
-        pw.Expanded(child: _text(left, 7.5, _muted, bold: true)),
-        _text(right, 7.5, PdfColor.fromInt(0xFF208778), bold: true),
-      ]),
-      pw.SizedBox(height: 9),
-      pw.Row(children: [
-        pw.Expanded(child: _text('DISPLAY ROOM / PRODUCT LOOKBOOK',
-            7.5, _muted)),
-        _text('$pageNumber', 8, PdfColor.fromInt(0xFF208778), bold: true),
+        pw.Expanded(child: _text(catalogueName, 7.5, _muted)),
+        _text('$pageNumber', 8, PdfColor.fromInt(0xFF208778),
+            bold: true),
       ]),
     ]);
   }
