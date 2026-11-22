@@ -1,6 +1,10 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
+import '../services/catalogue_logo_data.dart';
 import '../controllers/product_controller.dart';
 import '../controllers/cart_controller.dart';
 import '../models/product_model.dart';
@@ -17,6 +21,10 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   final ProductController controller = Get.find<ProductController>();
+
+  // Reuse the same official company logo embedded for the PDF cover.
+  // No change to pubspec.yaml, assets, or any network request is needed.
+  late final Uint8List _headerLogoBytes = base64Decode(mlilCompanyLogoBase64);
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -1040,10 +1048,30 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // ================================================================
+  // COMPANY LOGO (header only)
+  // ================================================================
+  Widget _buildHeaderLogo({required double width, required double height}) {
+    return SizedBox(
+      width: width,
+      height: height,
+      child: Image.memory(
+        _headerLogoBytes,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.high,
+        gaplessPlayback: true,
+        semanticLabel: 'Multi-Line Industries Limited',
+      ),
+    );
+  }
+
+  // ================================================================
   // BUILD
   // ================================================================
   @override
   Widget build(BuildContext context) {
+    // On smaller screens, give the logo its own centered header row so
+    // the existing menu/title and Clear/Cart controls never overlap it.
+    final bool compactHeader = MediaQuery.sizeOf(context).width < 900;
     return Scaffold(
       drawer: SizedBox(
         width: 330,
@@ -1052,11 +1080,24 @@ class _DashboardPageState extends State<DashboardPage> {
 
       appBar: AppBar(
         toolbarHeight: 72,
+        // Centered across the entire viewport on desktop, not merely
+        // between the title and cart actions.
+        flexibleSpace: compactHeader
+            ? null
+            : SafeArea(
+                child: Center(
+                  child: IgnorePointer(
+                    child: _buildHeaderLogo(width: 270, height: 46),
+                  ),
+                ),
+              ),
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Display Room',
+              'MLIL Display Room',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontWeight: FontWeight.w900,
                 fontSize: 21,
@@ -1066,6 +1107,8 @@ class _DashboardPageState extends State<DashboardPage> {
             SizedBox(height: 2),
             Text(
               'Explore available products and collections',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
@@ -1077,6 +1120,15 @@ class _DashboardPageState extends State<DashboardPage> {
         actions: [
           _buildCartHeaderActions(),
         ],
+        bottom: compactHeader
+            ? PreferredSize(
+                preferredSize: const Size.fromHeight(44),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _buildHeaderLogo(width: 220, height: 36),
+                ),
+              )
+            : null,
       ),
 
       body: Column(
