@@ -132,7 +132,7 @@ class CartPdfService {
           ),
           pw.Positioned(
             left: 44, top: 64,
-            child: _text('THE PRODUCT EDIT / AUTOMATED CATALOGUE',
+            child: _text('',
                 9, PdfColors.white, bold: true),
           ),
           // White logo card in the marked top-right cover area.

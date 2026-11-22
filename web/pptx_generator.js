@@ -210,7 +210,7 @@ async function generateProductPresentation(products, fileName) {
     slide.background = { color: C.ink };
     block(slide, 11.40, 0, 1.93, SH, C.ink2);
     block(slide, 13.16, 0, 0.17, SH, C.coral);
-    text(slide, 'THE PRODUCT EDIT / AUTOMATED CATALOGUE', 0.78, 0.59,
+    text(slide, '', 0.78, 0.59,
       6.1, 0.25, { fontSize: 10, bold: true, color: C.white });
     block(slide, 9.13, 0.44, 3.46, 1.02, C.white, 0.09);
     drawPhoto(slide, logo, 9.35, 0.64, 3.01, 0.63);
