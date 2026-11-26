@@ -1217,6 +1217,16 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  Widget _buildPhoneHeaderTitle() {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: _buildHeaderLogo(width: 210, height: 40),
+      ),
+    );
+  }
+
   // ================================================================
   // BUILD
   // ================================================================
@@ -1234,7 +1244,7 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
       appBar: AppBar(
         toolbarHeight: phoneHeader ? 60 : 72,
-        titleSpacing: phoneHeader ? 0 : null,
+        titleSpacing: phoneHeader ? 6 : null,
         leading: phoneHeader
             ? IconButton(
                 tooltip: 'Open product filters',
@@ -1242,8 +1252,8 @@ class _DashboardPageState extends State<DashboardPage> {
                 icon: const Icon(Icons.menu_rounded, size: 25),
               )
             : null,
-        // One centered, compact logo on phones. No truncated title, second
-        // logo row, or oversized Cart/Clear buttons on small screens.
+        // Desktop keeps the centered logo. On phones the transparent
+        // logo sits directly in the title area, so no extra logo row is shown.
         flexibleSpace: !compactHeader
             ? SafeArea(
                 child: Center(
@@ -1254,9 +1264,7 @@ class _DashboardPageState extends State<DashboardPage> {
               )
             : null,
         title: phoneHeader
-            ? Center(
-                child: _buildHeaderLogo(width: 174, height: 37),
-              )
+            ? _buildPhoneHeaderTitle()
             : const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
