@@ -23,9 +23,9 @@ class _DashboardPageState extends State<DashboardPage> {
   final ProductController controller = Get.find<ProductController>();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // Reuse the same official company logo embedded for the PDF cover.
-  // No change to pubspec.yaml, assets, or any network request is needed.
-  late final Uint8List _headerLogoBytes = base64Decode(mlilCompanyLogoBase64);
+  // Official transparent company logo for the website AppBar.
+  // Embedded locally: no extra assets, packages or network request required.
+  late final Uint8List _headerLogoBytes = base64Decode(mlilHeaderLogoBase64);
 
   final TextEditingController _searchController = TextEditingController();
 
