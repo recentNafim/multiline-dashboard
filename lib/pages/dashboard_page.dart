@@ -641,78 +641,136 @@ class _DashboardPageState extends State<DashboardPage> {
   // ================================================================
   // TOP CATEGORY / SUB CATEGORY / SEARCH BAR
   // ================================================================
-  // Phone layout: keep search accessible and move bulky filter menus into
-  // the existing, fully functional filter drawer.
+  // True mobile storefront: one search row and a filter drawer trigger.
+  // The larger desktop category/dropdown toolbar is intentionally hidden.
   Widget _buildMobileTopFilterBar() {
     final int activeFilters =
         (_selectedCategory == null ? 0 : 1) +
         (_selectedSubCategory == null ? 0 : 1);
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE4E9F2)),
-        boxShadow: const [
-          BoxShadow(color: Color(0x0B0F172A), blurRadius: 16, offset: Offset(0, 5)),
-        ],
-      ),
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 7),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextField(
-            controller: _searchController,
-            textInputAction: TextInputAction.search,
-            onChanged: (value) => setState(() => _searchText = value),
-            decoration: InputDecoration(
-              hintText: 'Search products or item codes',
-              hintStyle: const TextStyle(fontSize: 13),
-              prefixIcon: const Icon(Icons.search_rounded, size: 20),
-              suffixIcon: _searchText.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: 'Clear search',
-                      icon: const Icon(Icons.close_rounded, size: 18),
-                      onPressed: () {
-                        _searchController.clear();
-                        setState(() => _searchText = '');
-                      },
-                    ),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(vertical: 12),
-              filled: true,
-              fillColor: const Color(0xFFF7F9FC),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
-            ),
-          ),
-          const SizedBox(height: 9),
           Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-                  icon: const Icon(Icons.tune_rounded, size: 18),
-                  label: Text(activeFilters == 0 ? 'Filter products' : 'Filters ($activeFilters)',
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 42),
-                    side: const BorderSide(color: Color(0xFFE2E7F0)),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: SizedBox(
+                  height: 48,
+                  child: TextField(
+                    controller: _searchController,
+                    textInputAction: TextInputAction.search,
+                    onChanged: (value) => setState(() => _searchText = value),
+                    style: const TextStyle(fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: 'Search products / item code',
+                      hintStyle: const TextStyle(
+                        color: Color(0xFF8892A2), fontSize: 13),
+                      prefixIcon: const Icon(Icons.search_rounded, size: 21),
+                      suffixIcon: _searchText.isEmpty
+                          ? null
+                          : IconButton(
+                              tooltip: 'Clear search',
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchText = '');
+                              },
+                            ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(13),
+                        borderSide: const BorderSide(color: Color(0xFFE1E6F0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(13),
+                        borderSide: const BorderSide(
+                          color: Color(0xFF5269BA), width: 1.5),
+                      ),
+                    ),
                   ),
                 ),
               ),
-              if (_hasFilter) ...[
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: _resetFilters,
-                  icon: const Icon(Icons.restart_alt_rounded, size: 17),
-                  label: const Text('Reset'),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 48,
+                height: 48,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned.fill(
+                      child: IconButton.filledTonal(
+                        tooltip: 'Filter products',
+                        onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                        style: IconButton.styleFrom(
+                          backgroundColor: const Color(0xFFE9ECFB),
+                          foregroundColor: const Color(0xFF354A8D),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(13)),
+                        ),
+                        icon: const Icon(Icons.tune_rounded, size: 22),
+                      ),
+                    ),
+                    if (activeFilters > 0)
+                      Positioned(
+                        top: -4,
+                        right: -4,
+                        child: Container(
+                          constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          alignment: Alignment.center,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF354A8D), shape: BoxShape.circle),
+                          child: Text('$activeFilters',
+                            style: const TextStyle(
+                              color: Colors.white, fontSize: 10,
+                              fontWeight: FontWeight.w800)),
+                        ),
+                      ),
+                  ],
                 ),
-              ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(Icons.grid_view_rounded,
+                size: 15, color: Color(0xFF6C7790)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Obx(() {
+                  final int total = controller.products.length;
+                  final bool loading = controller.isLoading.value && total == 0;
+                  final int matching = _hasFilter ? filteredProducts.length : total;
+                  return Text(
+                    loading
+                        ? 'Loading products...'
+                        : _hasFilter
+                            ? 'Showing $matching of $total products'
+                            : '$total products',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12,
+                      fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                  );
+                }),
+              ),
+              if (_hasFilter)
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: _resetFilters,
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    child: Text('Clear filters',
+                      style: TextStyle(fontSize: 12,
+                        fontWeight: FontWeight.w700, color: Color(0xFF4055A0))),
+                  ),
+                ),
             ],
           ),
         ],
@@ -1089,7 +1147,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildCartHeaderActions() {
     final bool compact = MediaQuery.sizeOf(context).width < 630;
     final CartController cart = Get.find<CartController>();
-    final bool phone = MediaQuery.sizeOf(context).width < 600;
+    final bool phone = MediaQuery.sizeOf(context).width < 650;
 
     return Obx(() {
       final int itemCount = cart.totalItems;
@@ -1164,38 +1222,40 @@ class _DashboardPageState extends State<DashboardPage> {
   // ================================================================
   @override
   Widget build(BuildContext context) {
-    // On smaller screens, give the logo its own centered header row so
-    // the existing menu/title and Clear/Cart controls never overlap it.
     final double screenWidth = MediaQuery.sizeOf(context).width;
-    final bool phoneHeader = screenWidth < 600;
+    final bool phoneHeader = screenWidth < 650;
     final bool compactHeader = screenWidth < 900;
+
     return Scaffold(
       key: _scaffoldKey,
       drawer: SizedBox(
         width: screenWidth < 370 ? screenWidth * 0.91 : 330,
         child: _buildFilterDrawer(),
       ),
-
       appBar: AppBar(
-        toolbarHeight: phoneHeader ? 58 : 72,
+        toolbarHeight: phoneHeader ? 60 : 72,
         titleSpacing: phoneHeader ? 0 : null,
-        // Centered across the entire viewport on desktop, not merely
-        // between the title and cart actions.
-        flexibleSpace: compactHeader
-            ? null
-            : SafeArea(
+        leading: phoneHeader
+            ? IconButton(
+                tooltip: 'Open product filters',
+                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                icon: const Icon(Icons.menu_rounded, size: 25),
+              )
+            : null,
+        // One centered, compact logo on phones. No truncated title, second
+        // logo row, or oversized Cart/Clear buttons on small screens.
+        flexibleSpace: !compactHeader
+            ? SafeArea(
                 child: Center(
                   child: IgnorePointer(
                     child: _buildHeaderLogo(width: 270, height: 46),
                   ),
                 ),
-              ),
+              )
+            : null,
         title: phoneHeader
-            ? const Text(
-                'MLIL Display Room',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+            ? Center(
+                child: _buildHeaderLogo(width: 174, height: 37),
               )
             : const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1211,19 +1271,13 @@ class _DashboardPageState extends State<DashboardPage> {
                       color: Color(0xFF64748B))),
                 ],
               ),
-        actions: [
-          _buildCartHeaderActions(),
-        ],
-        bottom: compactHeader
+        actions: [_buildCartHeaderActions()],
+        bottom: !phoneHeader && compactHeader
             ? PreferredSize(
-                preferredSize: Size.fromHeight(phoneHeader ? 50 : 44),
+                preferredSize: const Size.fromHeight(44),
                 child: Padding(
-                  padding: EdgeInsets.only(bottom: phoneHeader ? 10 : 8,
-                    top: phoneHeader ? 5 : 0),
-                  child: _buildHeaderLogo(
-                    width: phoneHeader ? 210 : 220,
-                    height: phoneHeader ? 33 : 36,
-                  ),
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _buildHeaderLogo(width: 220, height: 36),
                 ),
               )
             : null,
@@ -1352,21 +1406,34 @@ class _DashboardPageState extends State<DashboardPage> {
                     }
 
                     final bool mobileCards = constraints.maxWidth < 650;
-                    final bool twoColumnPhone = constraints.maxWidth >= 360;
+                    final bool twoColumnPhone = constraints.maxWidth >= 350;
                     if (mobileCards) {
+                      if (!twoColumnPhone) {
+                        return ListView.separated(
+                          keyboardDismissBehavior:
+                              ScrollViewKeyboardDismissBehavior.onDrag,
+                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 28),
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          itemCount: products.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 10),
+                          itemBuilder: (context, index) =>
+                              _buildNarrowPhoneProductCard(products[index]),
+                        );
+                      }
                       return GridView.builder(
-                        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 28),
+                        keyboardDismissBehavior:
+                            ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 28),
                         physics: const AlwaysScrollableScrollPhysics(),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: twoColumnPhone ? 2 : 1,
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
                           crossAxisSpacing: 10,
-                          mainAxisSpacing: 12,
-                          mainAxisExtent: twoColumnPhone ? 364 : 345,
+                          mainAxisSpacing: 11,
+                          mainAxisExtent: 330,
                         ),
                         itemCount: products.length,
-                        itemBuilder: (context, index) => _buildMobileProductCard(
-                          products[index], compact: twoColumnPhone),
+                        itemBuilder: (context, index) =>
+                            _buildMobileProductCard(products[index], compact: true),
                       );
                     }
 
@@ -1400,7 +1467,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final String subCategory = _getValue(item, 'subCategory');
     final String status = _getValue(item, 'status');
     final String imageUrl = _getProductImageUrl(item);
-    final double imageHeight = compact ? 137 : 155;
+    final double imageHeight = compact ? 129 : 155;
     final ProductModel? model = item is ProductModel ? item : null;
 
     Widget miniRow(IconData icon, String text) => Row(
@@ -1451,7 +1518,7 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             Expanded(
               child: Padding(
-                padding: EdgeInsets.fromLTRB(compact ? 9 : 13, 10,
+                padding: EdgeInsets.fromLTRB(compact ? 9 : 13, 9,
                   compact ? 9 : 13, 9),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1513,6 +1580,104 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  // Under 350 logical pixels, use a horizontal list instead of a cramped grid.
+  Widget _buildNarrowPhoneProductCard(dynamic item) {
+    final String name = _getValue(item, 'description');
+    final String code = _getValue(item, 'itemCode');
+    final String business = _getValue(item, 'business');
+    final String imageUrl = _getProductImageUrl(item);
+    final ProductModel? model = item is ProductModel ? item : null;
+
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(15),
+        side: const BorderSide(color: Color(0xFFE3E9F2)),
+      ),
+      child: InkWell(
+        onTap: () => _openDetailPage(item),
+        child: SizedBox(
+          height: 154,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 112,
+                child: ColoredBox(
+                  color: const Color(0xFFF7F8FB),
+                  child: model != null && model.imageUrls.isNotEmpty
+                      ? ProductImageCarousel(
+                          urls: model.imageUrls,
+                          height: 154,
+                          compactControls: true,
+                        )
+                      : _buildProductImage(imageUrl, height: 154),
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(name.isEmpty ? 'Product' : name,
+                        maxLines: 2, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12,
+                          fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 4),
+                      Text('Item: $code', maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10,
+                          color: Color(0xFF7A8394))),
+                      const SizedBox(height: 5),
+                      Text(business, maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11,
+                          color: Color(0xFF596579))),
+                      const Spacer(),
+                      Row(
+                        children: [
+                          if (model != null) ...[
+                            SizedBox(
+                              width: 36, height: 34,
+                              child: IconButton.filledTonal(
+                                tooltip: 'Add to Cart',
+                                onPressed: () =>
+                                    Get.find<CartController>().addToCart(model),
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(
+                                  Icons.add_shopping_cart_outlined, size: 18),
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                          ],
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: () => _openDetailPage(item),
+                              style: OutlinedButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                minimumSize: const Size(0, 34),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(9)),
+                              ),
+                              child: const Text('Details',
+                                style: TextStyle(fontSize: 11)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2099,16 +2264,6 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ),
 
-            if (MediaQuery.sizeOf(context).width < 600)
-              Obx(() => ListTile(
-                leading: const Icon(Icons.delete_sweep_outlined),
-                title: const Text('Clear Cart'),
-                enabled: Get.find<CartController>().totalItems > 0,
-                onTap: () {
-                  Navigator.of(context).pop();
-                  _confirmClearCart();
-                },
-              )),
             const Divider(height: 1),
 
             // ========================================================
