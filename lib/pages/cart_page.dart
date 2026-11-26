@@ -74,13 +74,9 @@ class CartPage extends GetView<CartController> {
 
         final entries = controller.items.entries.toList();
 
+        final bool phone = MediaQuery.sizeOf(context).width < 600;
         return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(
-            16,
-            12,
-            16,
-            100,
-          ),
+          padding: EdgeInsets.fromLTRB(phone ? 10 : 16, 12, phone ? 10 : 16, 100),
           itemCount: entries.length,
           separatorBuilder: (_, __) {
             return const SizedBox(height: 12);
@@ -120,69 +116,56 @@ class CartPage extends GetView<CartController> {
                 ),
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                // ====================================================
-                // PRESENTATION BUTTON
-                // ====================================================
-                SizedBox(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final bool phone = constraints.maxWidth < 480;
+                final Widget presentationButton = SizedBox(
                   height: 42,
+                  width: phone ? double.infinity : null,
                   child: OutlinedButton.icon(
                     onPressed: _makePresentation,
-                    icon: const Icon(
-                      Icons.slideshow_rounded,
-                      size: 18,
-                    ),
-                    label: const Text(
-                      'Presentation',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    icon: const Icon(Icons.slideshow_rounded, size: 18),
+                    label: Text(
+                      phone && constraints.maxWidth < 330
+                          ? 'PPTX' : 'Presentation',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: phone ? 12 : 13,
+                        fontWeight: FontWeight.w700),
                     ),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                      ),
+                      padding: EdgeInsets.symmetric(horizontal: phone ? 8 : 16),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                        borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
-                ),
-
-                const SizedBox(width: 10),
-
-                // ====================================================
-                // PDF BUTTON
-                // ====================================================
-                SizedBox(
+                );
+                final Widget pdfButton = SizedBox(
                   height: 42,
+                  width: phone ? double.infinity : null,
                   child: FilledButton.icon(
                     onPressed: _makePdf,
-                    icon: const Icon(
-                      Icons.picture_as_pdf_outlined,
-                      size: 18,
-                    ),
-                    label: const Text(
-                      'PDF',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+                    icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                    label: const Text('PDF',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                     style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                      ),
+                      padding: EdgeInsets.symmetric(horizontal: phone ? 9 : 18),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+                        borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
-                ),
-              ],
+                );
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (phone) Expanded(child: presentationButton)
+                    else presentationButton,
+                    const SizedBox(width: 10),
+                    if (phone) Expanded(child: pdfButton)
+                    else pdfButton,
+                  ],
+                );
+              },
             ),
           ),
         );
@@ -490,6 +473,7 @@ class _CartItemCard extends StatelessWidget {
     final CartController cart = Get.find<CartController>();
 
     final product = item.product;
+    final bool phone = MediaQuery.sizeOf(context).width < 600;
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -515,12 +499,12 @@ class _CartItemCard extends StatelessWidget {
           // ==========================================================
           _CartProductImage(
             product: product,
-            height: 110,
-            width: 110,
+            height: phone ? 90 : 110,
+            width: phone ? 90 : 110,
             borderRadius: 14,
           ),
 
-          const SizedBox(width: 12),
+          SizedBox(width: phone ? 10 : 12),
 
           // ==========================================================
           // PRODUCT DETAILS

@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 class ProductImageCarousel extends StatefulWidget {
   final List<String> urls;
   final double height;
+  final bool compactControls;
 
   const ProductImageCarousel({
     super.key,
     required this.urls,
     this.height = 172,
+    this.compactControls = false,
   });
 
   @override
@@ -64,7 +66,22 @@ class _ProductImageCarouselState extends State<ProductImageCarousel> {
               ),
             ),
           ),
-          if (urls.length > 1) ...[
+          if (urls.length > 1 && widget.compactControls)
+            Positioned(
+              right: 7,
+              bottom: 7,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xC91B2433),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text('${_index + 1}/${urls.length}',
+                  style: const TextStyle(color: Colors.white, fontSize: 10,
+                    fontWeight: FontWeight.w600)),
+              ),
+            ),
+          if (urls.length > 1 && !widget.compactControls) ...[
             Positioned(
               left: 3,
               top: 0,

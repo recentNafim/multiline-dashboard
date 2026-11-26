@@ -21,6 +21,7 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   final ProductController controller = Get.find<ProductController>();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   // Reuse the same official company logo embedded for the PDF cover.
   // No change to pubspec.yaml, assets, or any network request is needed.
@@ -452,11 +453,11 @@ class _DashboardPageState extends State<DashboardPage> {
   // ================================================================
   // IMAGE WIDGET
   // ================================================================
-  Widget _buildProductImage(String imageUrl) {
+  Widget _buildProductImage(String imageUrl, {double height = 172}) {
     if (imageUrl.trim().isEmpty) {
       return Container(
         width: double.infinity,
-        height: 172,
+        height: height,
         color: const Color(0xFFF4F6F8),
         child: const Center(
           child: Column(
@@ -484,10 +485,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return SizedBox(
       width: double.infinity,
-      height: 172,
+      height: height,
       child: Image.network(
         imageUrl,
-        fit: BoxFit.cover,
+        fit: height == 172 ? BoxFit.cover : BoxFit.contain,
         loadingBuilder: (
             context,
             child,
@@ -640,7 +641,89 @@ class _DashboardPageState extends State<DashboardPage> {
   // ================================================================
   // TOP CATEGORY / SUB CATEGORY / SEARCH BAR
   // ================================================================
+  // Phone layout: keep search accessible and move bulky filter menus into
+  // the existing, fully functional filter drawer.
+  Widget _buildMobileTopFilterBar() {
+    final int activeFilters =
+        (_selectedCategory == null ? 0 : 1) +
+        (_selectedSubCategory == null ? 0 : 1);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE4E9F2)),
+        boxShadow: const [
+          BoxShadow(color: Color(0x0B0F172A), blurRadius: 16, offset: Offset(0, 5)),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _searchController,
+            textInputAction: TextInputAction.search,
+            onChanged: (value) => setState(() => _searchText = value),
+            decoration: InputDecoration(
+              hintText: 'Search products or item codes',
+              hintStyle: const TextStyle(fontSize: 13),
+              prefixIcon: const Icon(Icons.search_rounded, size: 20),
+              suffixIcon: _searchText.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      icon: const Icon(Icons.close_rounded, size: 18),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _searchText = '');
+                      },
+                    ),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 12),
+              filled: true,
+              fillColor: const Color(0xFFF7F9FC),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 9),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                  icon: const Icon(Icons.tune_rounded, size: 18),
+                  label: Text(activeFilters == 0 ? 'Filter products' : 'Filters ($activeFilters)',
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 42),
+                    side: const BorderSide(color: Color(0xFFE2E7F0)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              if (_hasFilter) ...[
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: _resetFilters,
+                  icon: const Icon(Icons.restart_alt_rounded, size: 17),
+                  label: const Text('Reset'),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTopFilterBar() {
+    if (MediaQuery.sizeOf(context).width < 650) {
+      return _buildMobileTopFilterBar();
+    }
     final List<String> categories =
         categoryList;
 
@@ -663,9 +746,7 @@ class _DashboardPageState extends State<DashboardPage> {
         ? _selectedSubCategory
         : null;
 
-    Widget searchField = SizedBox(
-      width: 330,
-      child: TextField(
+    Widget searchField = TextField(
         controller: _searchController,
         onChanged: (value) {
           setState(() {
@@ -710,7 +791,6 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ),
         ),
-      ),
     );
 
     Widget categoryDropdown = SizedBox(
@@ -1009,9 +1089,24 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildCartHeaderActions() {
     final bool compact = MediaQuery.sizeOf(context).width < 630;
     final CartController cart = Get.find<CartController>();
+    final bool phone = MediaQuery.sizeOf(context).width < 600;
 
     return Obx(() {
       final int itemCount = cart.totalItems;
+      if (phone) {
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: IconButton(
+            tooltip: 'Open cart ($itemCount items)',
+            onPressed: _openCart,
+            icon: Badge(
+              isLabelVisible: itemCount > 0,
+              label: Text(itemCount > 99 ? '99+' : '$itemCount'),
+              child: const Icon(Icons.shopping_bag_outlined, size: 23),
+            ),
+          ),
+        );
+      }
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1071,15 +1166,19 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     // On smaller screens, give the logo its own centered header row so
     // the existing menu/title and Clear/Cart controls never overlap it.
-    final bool compactHeader = MediaQuery.sizeOf(context).width < 900;
+    final double screenWidth = MediaQuery.sizeOf(context).width;
+    final bool phoneHeader = screenWidth < 600;
+    final bool compactHeader = screenWidth < 900;
     return Scaffold(
+      key: _scaffoldKey,
       drawer: SizedBox(
-        width: 330,
+        width: screenWidth < 370 ? screenWidth * 0.91 : 330,
         child: _buildFilterDrawer(),
       ),
 
       appBar: AppBar(
-        toolbarHeight: 72,
+        toolbarHeight: phoneHeader ? 58 : 72,
+        titleSpacing: phoneHeader ? 0 : null,
         // Centered across the entire viewport on desktop, not merely
         // between the title and cart actions.
         flexibleSpace: compactHeader
@@ -1091,41 +1190,40 @@ class _DashboardPageState extends State<DashboardPage> {
                   ),
                 ),
               ),
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'MLIL Display Room',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 21,
-                letterSpacing: -0.3,
+        title: phoneHeader
+            ? const Text(
+                'MLIL Display Room',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17),
+              )
+            : const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('MLIL Display Room', maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontWeight: FontWeight.w900,
+                      fontSize: 21, letterSpacing: -0.3)),
+                  SizedBox(height: 2),
+                  Text('Explore available products and collections',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500,
+                      color: Color(0xFF64748B))),
+                ],
               ),
-            ),
-            SizedBox(height: 2),
-            Text(
-              'Explore available products and collections',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF64748B),
-              ),
-            ),
-          ],
-        ),
         actions: [
           _buildCartHeaderActions(),
         ],
         bottom: compactHeader
             ? PreferredSize(
-                preferredSize: const Size.fromHeight(44),
+                preferredSize: Size.fromHeight(phoneHeader ? 50 : 44),
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _buildHeaderLogo(width: 220, height: 36),
+                  padding: EdgeInsets.only(bottom: phoneHeader ? 10 : 8,
+                    top: phoneHeader ? 5 : 0),
+                  child: _buildHeaderLogo(
+                    width: phoneHeader ? 210 : 220,
+                    height: phoneHeader ? 33 : 36,
+                  ),
                 ),
               )
             : null,
@@ -1253,28 +1351,36 @@ class _DashboardPageState extends State<DashboardPage> {
                       crossAxisCount = 2;
                     }
 
+                    final bool mobileCards = constraints.maxWidth < 650;
+                    final bool twoColumnPhone = constraints.maxWidth >= 360;
+                    if (mobileCards) {
+                      return GridView.builder(
+                        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 28),
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: twoColumnPhone ? 2 : 1,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 12,
+                          mainAxisExtent: twoColumnPhone ? 364 : 345,
+                        ),
+                        itemCount: products.length,
+                        itemBuilder: (context, index) => _buildMobileProductCard(
+                          products[index], compact: twoColumnPhone),
+                      );
+                    }
+
                     return GridView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-                      physics:
-                      const AlwaysScrollableScrollPhysics(),
-                      gridDelegate:
-                      SliverGridDelegateWithFixedCrossAxisCount(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: crossAxisCount,
                         crossAxisSpacing: 16,
                         mainAxisSpacing: 16,
-                        // Extra space for MOQ, Size Range and the quick cart action.
-                        // Keeps the product card from overflowing on narrower grids.
                         mainAxisExtent: 482,
                       ),
                       itemCount: products.length,
-                      itemBuilder: (
-                          BuildContext context,
-                          int index,
-                          ) {
-                        return _buildProductCard(
-                          products[index],
-                        );
-                      },
+                      itemBuilder: (context, index) => _buildProductCard(products[index]),
                     );
                   },
                 ),
@@ -1282,6 +1388,132 @@ class _DashboardPageState extends State<DashboardPage> {
             }),
           ),
         ],
+      ),
+    );
+  }
+
+  // Responsive storefront card for phones; desktop product card is unchanged.
+  Widget _buildMobileProductCard(dynamic item, {required bool compact}) {
+    final String name = _getValue(item, 'description');
+    final String code = _getValue(item, 'itemCode');
+    final String business = _getValue(item, 'business');
+    final String subCategory = _getValue(item, 'subCategory');
+    final String status = _getValue(item, 'status');
+    final String imageUrl = _getProductImageUrl(item);
+    final double imageHeight = compact ? 137 : 155;
+    final ProductModel? model = item is ProductModel ? item : null;
+
+    Widget miniRow(IconData icon, String text) => Row(
+      children: [
+        Icon(icon, size: 12, color: const Color(0xFF8B93A3)),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(text.isEmpty ? '-' : text, maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 10, color: Color(0xFF626D7D))),
+        ),
+      ],
+    );
+
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(17),
+        side: const BorderSide(color: Color(0xFFE3E9F2))),
+      child: InkWell(
+        onTap: () => _openDetailPage(item),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              children: [
+                ColoredBox(
+                  color: const Color(0xFFF8F9FB),
+                  child: item is ProductModel && item.imageUrls.isNotEmpty
+                      ? ProductImageCarousel(urls: item.imageUrls, height: imageHeight, compactControls: compact)
+                      : _buildProductImage(imageUrl, height: imageHeight),
+                ),
+                if (status.trim().isNotEmpty)
+                  Positioned(
+                    top: 7, right: 7,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.94),
+                        borderRadius: BorderRadius.circular(20)),
+                      child: Text(status, maxLines: 1,
+                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700,
+                          color: status.toUpperCase() == 'ACTIVE'
+                            ? const Color(0xFF23864B) : const Color(0xFF64748B))),
+                    ),
+                  ),
+              ],
+            ),
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(compact ? 9 : 13, 10,
+                  compact ? 9 : 13, 9),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name.trim().isEmpty ? 'Product' : name,
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: compact ? 12 : 15,
+                        fontWeight: FontWeight.w800, height: 1.22)),
+                    const SizedBox(height: 4),
+                    Text('Item: ${code.isEmpty ? '-' : code}', maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10, color: Color(0xFF798293))),
+                    const SizedBox(height: 9),
+                    miniRow(Icons.business_outlined, business),
+                    const SizedBox(height: 4),
+                    miniRow(Icons.category_outlined, subCategory),
+                    const Spacer(),
+                    if (model != null) ...[
+                      Text('MOQ: ${model.moq.toStringAsFixed(model.moq == model.moq.roundToDouble() ? 0 : 2)} ${model.uom}',
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 3),
+                      Text('Size: ${model.sizeRange.isEmpty ? '-' : model.sizeRange}',
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+                      const SizedBox(height: 9),
+                    ],
+                    Row(
+                      children: [
+                        if (model != null) ...[
+                          SizedBox(
+                            width: compact ? 38 : 46, height: 37,
+                            child: IconButton.filledTonal(
+                              tooltip: 'Add to Cart',
+                              onPressed: () => Get.find<CartController>().addToCart(model),
+                              icon: const Icon(Icons.add_shopping_cart_outlined, size: 19),
+                              padding: EdgeInsets.zero,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                        ],
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => _openDetailPage(item),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              minimumSize: const Size(0, 37),
+                              side: const BorderSide(color: Color(0xFFE2E7F2)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                            child: Text(compact ? 'Details' : 'View Details',
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1797,29 +2029,59 @@ class _DashboardPageState extends State<DashboardPage> {
 
                   const SizedBox(width: 12),
 
-                  const Expanded(
+                  Expanded(
                     child: Column(
-                      crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
+                        const Text(
                           'Filter Products',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             fontSize: 20,
-                            fontWeight:
-                            FontWeight.w800,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
-                        SizedBox(height: 2),
-                        Text(
-                          'Find products easily',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Color(
-                              0xFF7A8190,
-                            ),
-                          ),
-                        ),
+                        const SizedBox(height: 3),
+                        // Count products from the same reactive list used
+                        // by the dashboard; never use cart item quantity.
+                        Obx(() {
+                          final int totalProducts = controller.products.length;
+                          final bool loading = controller.isLoading.value &&
+                              totalProducts == 0;
+                          final int matchingProducts = _hasFilter
+                              ? filteredProducts.length
+                              : totalProducts;
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                loading
+                                    ? 'Loading products...'
+                                    : 'Total Products: $totalProducts',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFF576174),
+                                ),
+                              ),
+                              if (!loading && _hasFilter)
+                                Text(
+                                  'Matching Products: $matchingProducts',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF7A8190),
+                                  ),
+                                ),
+                            ],
+                          );
+                        }),
                       ],
                     ),
                   ),
@@ -1837,21 +2099,16 @@ class _DashboardPageState extends State<DashboardPage> {
               ),
             ),
 
-            const Divider(height: 1),
-
-            // A named Cart option makes cart access discoverable in the drawer.
-            Obx(() {
-              final int itemCount = Get.find<CartController>().totalItems;
-              return ListTile(
-                leading: const Icon(Icons.shopping_bag_outlined),
-                title: const Text('My Cart'),
-                trailing: Text('$itemCount'),
+            if (MediaQuery.sizeOf(context).width < 600)
+              Obx(() => ListTile(
+                leading: const Icon(Icons.delete_sweep_outlined),
+                title: const Text('Clear Cart'),
+                enabled: Get.find<CartController>().totalItems > 0,
                 onTap: () {
                   Navigator.of(context).pop();
-                  _openCart();
+                  _confirmClearCart();
                 },
-              );
-            }),
+              )),
             const Divider(height: 1),
 
             // ========================================================

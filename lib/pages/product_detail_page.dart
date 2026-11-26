@@ -91,11 +91,12 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   @override
   Widget build(BuildContext context) {
     final cartController = Get.find<CartController>();
+    final bool phone = MediaQuery.sizeOf(context).width < 600;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FB),
       appBar: AppBar(
-        toolbarHeight: 68,
+        toolbarHeight: phone ? 58 : 68,
         title: const Text(
           'Product Details',
           style: TextStyle(
@@ -108,6 +109,29 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           SizedBox(width: 10),
         ],
       ),
+      // Keep Add to Cart visible on phones even when details are long.
+      bottomNavigationBar: phone
+          ? SafeArea(
+              top: false,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: Color(0xFFE7EBF2))),
+                ),
+                child: SizedBox(
+                  height: 48,
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => cartController.addToCart(product),
+                    icon: const Icon(Icons.add_shopping_cart_outlined),
+                    label: const Text('Add to Cart',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ),
+            )
+          : null,
       body: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
@@ -227,19 +251,17 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
       CartController cartController,
       ) {
     final width = MediaQuery.sizeOf(context).width;
+    final bool phone = width < 600;
 
-    double imageHeight = width * 0.82;
-
-    if (imageHeight > 430) {
-      imageHeight = 430;
+    double imageHeight = width * (phone ? 0.72 : 0.76);
+    if (imageHeight > (phone ? 350 : 430)) {
+      imageHeight = phone ? 350 : 430;
     }
-
-    if (imageHeight < 260) {
-      imageHeight = 260;
-    }
+    if (imageHeight < 220) imageHeight = 220;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      padding: EdgeInsets.all(phone ? 12 : 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -276,7 +298,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
             ),
           ),
 
-          const SizedBox(height: 24),
+          SizedBox(height: phone ? 18 : 24),
 
           // ===================================================
           // DETAILS
@@ -393,6 +415,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         // =====================================================
         // ADD TO CART
         // =====================================================
+        if (MediaQuery.sizeOf(context).width >= 600)
         SizedBox(
           height: 50,
           child: FilledButton.icon(
@@ -422,7 +445,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
           ),
         ),
 
-        const SizedBox(height: 30),
+        SizedBox(height: MediaQuery.sizeOf(context).width < 600 ? 12 : 30),
 
         // =====================================================
         // PRODUCT INFORMATION TITLE
@@ -451,8 +474,8 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
         // =====================================================
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(
-            horizontal: 18,
+          padding: EdgeInsets.symmetric(
+            horizontal: MediaQuery.sizeOf(context).width < 600 ? 13 : 18,
           ),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -2661,7 +2684,7 @@ class _InfoRow extends StatelessWidget {
                 constraints,
                 ) {
               if (constraints.maxWidth <
-                  380) {
+                  285) {
                 return Column(
                   crossAxisAlignment:
                   CrossAxisAlignment
@@ -2738,7 +2761,7 @@ class _InfoRow extends StatelessWidget {
                   ),
 
                   SizedBox(
-                    width: 125,
+                    width: constraints.maxWidth < 410 ? 97 : 125,
                     child: Text(
                       label,
                       style:
@@ -2753,8 +2776,8 @@ class _InfoRow extends StatelessWidget {
                     ),
                   ),
 
-                  const SizedBox(
-                    width: 12,
+                  SizedBox(
+                    width: constraints.maxWidth < 410 ? 5 : 12,
                   ),
 
                   Expanded(
