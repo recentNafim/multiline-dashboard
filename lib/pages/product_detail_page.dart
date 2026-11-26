@@ -29,6 +29,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 
   late String _sizeRange = product.sizeRange.trim();
   late double _moq = product.moq;
+  late double _fob = product.fob;
   late String _buyer = product.buyer.trim();
   late String _weightDisplay = ProductModel.formatWeight(
     product.weightText, product.weight,
@@ -49,6 +50,11 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
   void _onMoqLoaded(double value) {
     if (!mounted || value == _moq) return;
     setState(() => _moq = value);
+  }
+
+  void _onFobLoaded(double value) {
+    if (!mounted || !value.isFinite || value == _fob) return;
+    setState(() => _fob = value);
   }
 
   void _onSizeRangeLoaded(String value) {
@@ -167,6 +173,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                   product: product,
                   onSizeRangeLoaded: _onSizeRangeLoaded,
                   onMoqLoaded: _onMoqLoaded,
+                  onFobLoaded: _onFobLoaded,
                   onBuyerLoaded: _onBuyerLoaded,
               onWeightLoaded: _onWeightLoaded,
                   width: double.infinity,
@@ -259,6 +266,7 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
               product: product,
               onSizeRangeLoaded: _onSizeRangeLoaded,
               onMoqLoaded: _onMoqLoaded,
+              onFobLoaded: _onFobLoaded,
               onBuyerLoaded: _onBuyerLoaded,
               onWeightLoaded: _onWeightLoaded,
               width: double.infinity,
@@ -493,6 +501,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
 
               _InfoRow(
                 onCopy: _copyProductField,
+                label: 'FOB',
+                value: _fob.isFinite && _fob != 0
+                    ? _prettyNumber(_fob)
+                    : 'Not provided',
+                icon: Icons.payments_outlined,
+              ),
+
+              _InfoRow(
+                onCopy: _copyProductField,
                 label: 'UOM',
                 value: product.uom,
                 icon: Icons.straighten_outlined,
@@ -572,6 +589,7 @@ class _ProductImageGallery extends StatefulWidget {
   final ProductModel product;
   final ValueChanged<String>? onSizeRangeLoaded;
   final ValueChanged<double>? onMoqLoaded;
+  final ValueChanged<double>? onFobLoaded;
   final ValueChanged<String>? onBuyerLoaded;
   final ValueChanged<String>? onWeightLoaded;
   final double width;
@@ -583,6 +601,7 @@ class _ProductImageGallery extends StatefulWidget {
     required this.product,
     this.onSizeRangeLoaded,
     this.onMoqLoaded,
+    this.onFobLoaded,
     this.onBuyerLoaded,
     this.onWeightLoaded,
     required this.width,
@@ -1284,6 +1303,14 @@ class _ProductImageGalleryState
       final double? fetchedMoq = ProductModel.readMoq(selectedDetail);
       if (mounted && fetchedMoq != null) {
         widget.onMoqLoaded?.call(fetchedMoq);
+      }
+      // Refresh FOB from the selected product detail, not an unrelated item.
+      final dynamic rawFob = selectedDetail['fob'] ?? selectedDetail['FOB'];
+      final double? fetchedFob = rawFob is num
+          ? rawFob.toDouble()
+          : double.tryParse(rawFob?.toString().trim() ?? '');
+      if (mounted && fetchedFob != null && fetchedFob.isFinite) {
+        widget.onFobLoaded?.call(fetchedFob);
       }
       // Display the actual Buyer for this detail; no hardcoded client name.
       final String fetchedBuyer = ProductModel.readBuyer(selectedDetail);
