@@ -1,0 +1,12 @@
+services:
+  mlil-customer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        FLUTTER_BASE_HREF: "/"
+    image: mlil-customer-dashboard:latest
+    container_name: mlil-customer-dashboard
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-3701}:80"

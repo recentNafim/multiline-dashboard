@@ -1,0 +1,31 @@
+# Git history and editor settings
+.git
+.gitignore
+.github
+.vscode
+.idea
+*.iml
+*.swp
+.DS_Store
+
+# Generated Flutter / Dart artifacts
+.dart_tool
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache
+.pub
+build
+coverage
+
+# Native platforms not needed by this Web image
+android
+ios
+linux
+macos
+windows
+
+# Local files and caches
+*.log
+*.zip
+**/.DS_Store
